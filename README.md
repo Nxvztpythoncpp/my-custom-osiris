@@ -8,7 +8,7 @@
 ## Newest update (08.08.2024) :
 <p> - my-custom-osiris v3 release  </p>
 <p> - added freestand </p>
-<p> - p100 resolver (was pretty good in 2019 - 2020 XD </p>
+<p> - p100 resolver (was pretty good in 2019 - 2020 XD) </p>
 <p> - better tickbase </p>
 <p> - more updates lol i cant name all of them</p>
 
