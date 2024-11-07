@@ -14,9 +14,8 @@ struct GlobalVars {
     float currenttime;
     float frametime;
     const int maxClients;
-    const int tickCount;
+    int tickCount;
     const float intervalPerTick;
-    int m_simticksthisframe;            // 0x0028
 
     float serverTime(UserCmd* = nullptr) const noexcept;
 };

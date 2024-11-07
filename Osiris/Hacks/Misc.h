@@ -13,7 +13,6 @@ struct ViewSetup;
 
 namespace Misc
 {
-    void getCmd(UserCmd* cmd) noexcept;
     bool isInChat() noexcept;
     void gatherDataOnTick(UserCmd* cmd) noexcept;
     void handleKeyEvent(int keynum, const char* currentBinding) noexcept;

@@ -80,7 +80,7 @@
     <ClCompile Include="Hacks\Chams.cpp">
       <Filter>Hacks</Filter>
     </ClCompile>
-    <ClCompile Include="Hacks\hitscan.cpp">
+    <ClCompile Include="Hacks\AimbotFunctions.cpp">
       <Filter>Hacks</Filter>
     </ClCompile>
     <ClCompile Include="Netvars.cpp">
@@ -260,11 +260,11 @@
     <ClCompile Include="SDK\BitBuffer.cpp">
       <Filter>SDK</Filter>
     </ClCompile>
-    <ClCompile Include="Vector2D.cpp">
-      <Filter>SDK</Filter>
+    <ClCompile Include="Hacks\LocalAnimationFix.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="includes.hpp">
-      <Filter>Header Files</Filter>
+    <ClCompile Include="Hacks\AnimationFix.cpp">
+      <Filter>Hacks</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -355,7 +355,7 @@
     <ClInclude Include="SDK\RenderView.h">
       <Filter>SDK</Filter>
     </ClInclude>
-    <ClInclude Include="Hacks\hitscan.h">
+    <ClInclude Include="Hacks\AimbotFunctions.h">
       <Filter>Hacks</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Entity.h">
@@ -682,16 +682,7 @@
     <ClInclude Include="SDK\ParticleCollection.h">
       <Filter>SDK</Filter>
     </ClInclude>
-    <ClInclude Include="Vector2D.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Localize.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="fontbyte.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Vertex.hpp">
+    <ClInclude Include="CSGOUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -74,15 +74,17 @@ static std::uintptr_t findPattern(const char* moduleName, std::string_view patte
     }
 
     if(reportNotFound)
-        MessageBoxA(NULL, ("Failed to find pattern #" + std::to_string(id) + '!').c_str(), "Osiris base", MB_OK | MB_ICONWARNING);
+        MessageBoxA(NULL, ("Failed to find pattern #" + std::to_string(id) + '!').c_str(), "Osiris", MB_OK | MB_ICONWARNING);
     return 0;
 }
 
 Memory::Memory() noexcept
 {
-    present = findPattern("gameoverlayrenderer", "\x8B\x4D?\xA1????\x51\xFF") + 4;
-    reset = findPattern("gameoverlayrenderer", "\xE8????\xA1????\x57\x53") + 6;  ///we need dis
+    present = findPattern("gameoverlayrenderer", "\x8B\x4D?\xA1????\x51\xFF") + 4; //updated offset taken from gmod cheat lol
+    reset = findPattern("gameoverlayrenderer", "\xE8????\xA1????\x57\x53") + 6; //updated offset taken from gmod cheat lol
 
+    soundMessages = reinterpret_cast<decltype(soundMessages)>(*reinterpret_cast<std::uintptr_t*>(findPattern(ENGINE_DLL, "\x74\x3D\x8B\x0D????\x56") + 4) - 4); //tf am i supposed to do with this shit
+    splitScreen = *reinterpret_cast<SplitScreen**>(findPattern(ENGINE_DLL, "\x79\x23\xA1") + 3); //angy snack
     clientMode = **reinterpret_cast<ClientMode***>((*reinterpret_cast<uintptr_t**>(interfaces->client))[10] + 5);
     input = *reinterpret_cast<Input**>((*reinterpret_cast<uintptr_t**>(interfaces->client))[16] + 1);
     globalVars = **reinterpret_cast<GlobalVars***>((*reinterpret_cast<uintptr_t**>(interfaces->client))[11] + 10);
@@ -164,7 +166,7 @@ Memory::Memory() noexcept
 
     particleCollection = relativeToAbsolute<decltype(particleCollection)>(findPattern(CLIENT_DLL, "\xE8????\x8B\x0E\x83\xC1\x10") + 1);
 
-    sendDatagram = findPattern(ENGINE_DLL, "\x55\x8B\xEC\x83\xE4\xF0\xB8????\xE8????\x56\x57\x8B\xF9\x89\x7C\x24\x14");
+    sendDatagram = findPattern(ENGINE_DLL, "\x55\x8B\xEC\x83\xE4\xF0\xB8????\xE8????\x56\x57\x8B\xF9\x89\x7C\x24\x14"); //updated offset taken from gmod cheat lol
 
     modifyEyePosition = relativeToAbsolute<decltype(modifyEyePosition)>(findPattern(CLIENT_DLL, "\xE8????\x8B\x06\x8B\xCE\xFF\x90????\x85\xC0\x74\x50") + 1);
 

@@ -8,8 +8,6 @@
 struct UserCmd;
 struct Vector;
 
-static const float epsilon = 0.03125f;
-
 namespace EnginePrediction
 {
 	void reset() noexcept;
@@ -18,7 +16,6 @@ namespace EnginePrediction
 	void run(UserCmd* cmd) noexcept;
 
 	void store() noexcept;
-	void restore() noexcept;
 	void apply(FrameStage) noexcept;
 
 	int getFlags() noexcept;
@@ -28,40 +25,18 @@ namespace EnginePrediction
 	struct NetvarData
 	{
 		int tickbase = -1;
-		float spawn_time{};
 
 		Vector aimPunchAngle{ };
 		Vector aimPunchAngleVelocity{ };
 		Vector baseVelocity{ };
-		float duckAmount{ 0.0f };
-		float duckSpeed{ 0.0f };
-		float fallVelocity{ 0.0f };
-		float thirdPersonRecoil{ 0.0f };
+		float duckAmount{ -1.f };
+		float duckSpeed{ -1.f };
+		float fallVelocity{ -1.f };
+		float thirdPersonRecoil{ -1.f };
 		Vector velocity{ };
-		float velocityModifier{ 0.0f };
+		float velocityModifier{ -1.f };
 		Vector viewPunchAngle{ };
 		Vector viewOffset{ };
-
-		static float checkDifference(float predicted, float original) noexcept
-		{
-			float delta = predicted - original;
-
-			if (fabsf(delta) <= epsilon)
-				return original;
-			return predicted;
-		}
-
-		static Vector checkDifference(Vector predicted, Vector original) noexcept
-		{
-			Vector delta = predicted - original;
-
-			if (fabsf(delta.x) <= epsilon
-				&& fabsf(delta.y) <= epsilon
-				&& fabsf(delta.z) <= epsilon)
-			{
-				return original;
-			}
-			return predicted;
-		}
+		Vector origin{ };
 	};
 }

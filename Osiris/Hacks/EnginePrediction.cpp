@@ -14,11 +14,6 @@
 #include "../SDK/Prediction.h"
 #include "../SDK/PredictionCopy.h"
 
-
-#include "../GameData.h"
-
-EnginePrediction::NetvarData netvars{ };
-
 static int localPlayerFlags;
 static Vector localPlayerVelocity;
 static bool inPrediction{ false };
@@ -37,20 +32,16 @@ void EnginePrediction::update() noexcept
     if (!localPlayer || !localPlayer->isAlive())
         return;
 
-    const auto deltaTick = memory->clientState->deltaTick;
-    const auto start = memory->clientState->lastCommandAck;
-    const auto stop = memory->clientState->lastOutgoingCommand + memory->clientState->chokedCommands;
+    if (memory->clientState->deltaTick > 0)
+        return;
 
-    if (netvars.velocityModifier < 1.f)
-        interfaces->prediction->inPrediction = true; // m_bFirstTimePrediction
-
-    // correct prediction when framerate is lower than tickrate.
-    // https://github.com/VSES/SourceEngine2007/blob/master/se2007/engine/cl_pred.cpp#L41
-    if (deltaTick > 0)
-    {
-        // call CPrediction::Update.
-        interfaces->prediction->update(deltaTick, deltaTick > 0, start, stop);
-    }
+    return interfaces->prediction->update
+    (
+        memory->clientState->deltaTick,
+        memory->clientState->deltaTick > 0,//memory->clientState->deltaTick > 0,
+        memory->clientState->lastCommandAck,
+        memory->clientState->chokedCommands + memory->clientState->lastOutgoingCommand
+    );
 }
 
 void EnginePrediction::run(UserCmd* cmd) noexcept
@@ -59,71 +50,51 @@ void EnginePrediction::run(UserCmd* cmd) noexcept
         return;
 
     inPrediction = true;
-    float sv_footsteps_backup = 0.0f;
-    float sv_min_jump_landing_sound_backup = 0.0f;
 
-    ConVar* sv_footsteps = nullptr;
-    ConVar* sv_min_jump_landing_sound = nullptr;
     localPlayerFlags = localPlayer->flags();
     localPlayerVelocity = localPlayer->velocity();
 
     *memory->predictionRandomSeed = 0;
     *memory->predictionPlayer = reinterpret_cast<int>(localPlayer.get());
 
+    auto weapon = localPlayer->getActiveWeapon();
+
     const auto oldCurrenttime = memory->globalVars->currenttime;
     const auto oldFrametime = memory->globalVars->frametime;
+    const auto oldTickCount = memory->globalVars->tickCount;
     const auto oldIsFirstTimePredicted = interfaces->prediction->isFirstTimePredicted;
     const auto oldInPrediction = interfaces->prediction->inPrediction;
 
     memory->globalVars->currenttime = memory->globalVars->serverTime();
-    memory->globalVars->frametime = interfaces->prediction->enginePaused ? 0 : memory->globalVars->intervalPerTick;
+    memory->globalVars->frametime = interfaces->prediction->enginePaused ? 0.0f : memory->globalVars->intervalPerTick;
+    memory->globalVars->tickCount = localPlayer->tickBase();
+
     interfaces->prediction->isFirstTimePredicted = false;
     interfaces->prediction->inPrediction = true;
-
-    // backup footsteps.
-    float backup_footsteps;
-    {
-        backup_footsteps = sv_footsteps_backup;
-        float_t value = 0.0f;
-        if (sv_footsteps)
-            *(uint32_t*)(uintptr_t(sv_footsteps) + 0x2C) = (uint32_t)sv_footsteps ^ uint32_t(value);
-
-        if (sv_min_jump_landing_sound)
-            *(uint32_t*)(uintptr_t(sv_min_jump_landing_sound) + 0x2C) = (uint32_t)sv_min_jump_landing_sound ^ 0x7F7FFFFF;
-
-        if (!sv_footsteps)
-            sv_footsteps = interfaces->cvar->findVar("sv_footsteps");
-
-        if (!sv_min_jump_landing_sound)
-            sv_min_jump_landing_sound = interfaces->cvar->findVar("sv_min_jump_landing_sound");
-
-        sv_footsteps_backup = *(float*)(uintptr_t(sv_footsteps) + 0x2C);
-        sv_min_jump_landing_sound_backup = *(float*)(uintptr_t(sv_min_jump_landing_sound) + 0x2C);
-    }
 
     if (cmd->impulse)
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(localPlayer.get()) + 0x320C) = cmd->impulse;
 
     cmd->buttons |= *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(localPlayer.get()) + 0x3344);
     cmd->buttons &= ~(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(localPlayer.get()) + 0x3340));
+
     localPlayer->updateButtonState(cmd->buttons);
 
     interfaces->gameMovement->startTrackPredictionErrors(localPlayer.get());
+
     interfaces->prediction->checkMovingGround(localPlayer.get(), memory->globalVars->frametime);
 
-    localPlayer->runPreThink();
-    localPlayer->runThink();
+    //localPlayer->runPreThink();
+    //localPlayer->runThink();
 
     memory->moveHelper->setHost(localPlayer.get());
     interfaces->prediction->setupMove(localPlayer.get(), cmd, memory->moveHelper, memory->moveData);
     interfaces->gameMovement->processMovement(localPlayer.get(), memory->moveData);
     interfaces->prediction->finishMove(localPlayer.get(), cmd, memory->moveData);
+
     memory->moveHelper->processImpacts();
 
-    localPlayer->runPostThink();
-
-    if (sv_footsteps)
-        *(float*)(uintptr_t(sv_footsteps) + 0x2C) = backup_footsteps;
+    //  localPlayer->runPostThink();
 
     interfaces->gameMovement->finishTrackPredictionErrors(localPlayer.get());
     memory->moveHelper->setHost(nullptr);
@@ -138,13 +109,8 @@ void EnginePrediction::run(UserCmd* cmd) noexcept
     interfaces->prediction->isFirstTimePredicted = oldIsFirstTimePredicted;
     interfaces->prediction->inPrediction = oldInPrediction;
 
-    const auto activeWeapon = localPlayer->getActiveWeapon();
-    if (!activeWeapon || activeWeapon->isGrenade() || activeWeapon->isKnife())
-        return;
-
-    activeWeapon->updateAccuracyPenalty();
-
-
+    if (weapon && !weapon->isGrenade() && !weapon->isKnife())
+        weapon->updateAccuracyPenalty();
 
     inPrediction = false;
 }
@@ -155,42 +121,20 @@ void EnginePrediction::store() noexcept
         return;
 
     const int tickbase = localPlayer->tickBase();
-    netvars.tickbase = tickbase;
 
+    NetvarData netvars{ };
+
+    netvars.tickbase = tickbase;
     netvars.aimPunchAngle = localPlayer->aimPunchAngle();
     netvars.aimPunchAngleVelocity = localPlayer->aimPunchAngleVelocity();
-    netvars.baseVelocity = localPlayer->baseVelocity();
-    netvars.duckAmount = localPlayer->duckAmount();
-    netvars.duckSpeed = localPlayer->duckSpeed();
-    netvars.fallVelocity = localPlayer->fallVelocity();
-    netvars.thirdPersonRecoil = localPlayer->thirdPersonRecoil();
-    netvars.velocity = localPlayer->velocity();
-    netvars.velocityModifier = localPlayer->velocityModifier();
     netvars.viewPunchAngle = localPlayer->viewPunchAngle();
     netvars.viewOffset = localPlayer->viewOffset();
-
-    netvarData.at(tickbase % 150) = netvars;
-}
-
-void EnginePrediction::restore() noexcept
-{
-    if (!localPlayer || !localPlayer->isAlive())
-        return;
-
-    const int tickbase = localPlayer->tickBase();
-    netvars.tickbase = tickbase;
-
-    localPlayer->aimPunchAngle() = netvars.aimPunchAngle;
-    localPlayer->aimPunchAngleVelocity() = netvars.aimPunchAngleVelocity;
-    localPlayer->baseVelocity() = netvars.baseVelocity;
-    localPlayer->duckAmount() = netvars.duckAmount;
-    localPlayer->duckSpeed() = netvars.duckSpeed;
-    localPlayer->fallVelocity() = netvars.fallVelocity;
-    localPlayer->thirdPersonRecoil() = netvars.thirdPersonRecoil;
-    localPlayer->velocity() = netvars.velocity;
-    localPlayer->velocityModifier() = netvars.velocityModifier;
-    localPlayer->viewPunchAngle() = netvars.viewPunchAngle;
-    localPlayer->viewOffset() = netvars.viewOffset;
+    netvars.velocity = localPlayer->velocity();
+    netvars.velocityModifier = localPlayer->velocityModifier();
+    netvars.duckAmount = localPlayer->duckAmount();
+    netvars.thirdPersonRecoil = localPlayer->thirdPersonRecoil();
+    netvars.duckSpeed = localPlayer->duckSpeed();
+    netvars.fallVelocity = localPlayer->fallVelocity();
 
     netvarData.at(tickbase % 150) = netvars;
 }
@@ -207,26 +151,50 @@ void EnginePrediction::apply(FrameStage stage) noexcept
         return;
 
     const int tickbase = localPlayer->tickBase();
-    const auto& netvars = netvarData.at(tickbase % 150);
+
+    const auto netvars = netvarData.at(tickbase % 150);
 
     if (!&netvars)
         return;
 
-    if (netvars.tickbase != tickbase)
+    if (tickbase != netvars.tickbase)
         return;
 
-    localPlayer->aimPunchAngle() = NetvarData::checkDifference(localPlayer->aimPunchAngle(), netvars.aimPunchAngle);
-    localPlayer->aimPunchAngleVelocity() = NetvarData::checkDifference(localPlayer->aimPunchAngleVelocity(), netvars.aimPunchAngleVelocity);
-    localPlayer->baseVelocity() = NetvarData::checkDifference(localPlayer->baseVelocity(), netvars.baseVelocity);
-    localPlayer->duckAmount() = std::clamp(NetvarData::checkDifference(localPlayer->duckAmount(), netvars.duckAmount), 0.0f, 1.0f);
-    localPlayer->duckSpeed() = NetvarData::checkDifference(localPlayer->duckSpeed(), netvars.duckSpeed);
-    localPlayer->fallVelocity() = NetvarData::checkDifference(localPlayer->fallVelocity(), netvars.fallVelocity);
-    localPlayer->thirdPersonRecoil() = NetvarData::checkDifference(localPlayer->thirdPersonRecoil(), netvars.thirdPersonRecoil);
-    localPlayer->velocity() = NetvarData::checkDifference(localPlayer->velocity(), netvars.velocity);
-    localPlayer->velocityModifier() = NetvarData::checkDifference(localPlayer->velocityModifier(), netvars.velocityModifier);
-    localPlayer->viewPunchAngle() = NetvarData::checkDifference(localPlayer->viewPunchAngle(), netvars.viewPunchAngle);
-    localPlayer->viewOffset() = NetvarData::checkDifference(localPlayer->viewOffset(), netvars.viewOffset);
-    localPlayer->tickBase() = static_cast<int>(NetvarData::checkDifference(localPlayer->tickBase(), netvars.tickbase));
+    const auto aim_punch_vel_diff = netvars.aimPunchAngleVelocity - localPlayer->aimPunchAngleVelocity();
+    const auto aim_punch_diff = netvars.aimPunchAngle - localPlayer->aimPunchAngle();
+    const auto viewpunch_diff = netvars.viewPunchAngle.x - localPlayer->viewPunchAngle().x;
+    const auto velocity_diff = netvars.velocity - localPlayer->velocity();
+    const auto origin_diff = netvars.origin - localPlayer->origin();
+
+    if (std::abs(aim_punch_diff.x) <= 0.03125f && std::abs(aim_punch_diff.y) <= 0.03125f && std::abs(aim_punch_diff.z) <= 0.03125f)
+        localPlayer->aimPunchAngle() = netvars.aimPunchAngle;
+
+    if (std::abs(aim_punch_vel_diff.x) <= 0.03125f && std::abs(aim_punch_vel_diff.y) <= 0.03125f && std::abs(aim_punch_vel_diff.z) <= 0.03125f)
+        localPlayer->aimPunchAngleVelocity() = netvars.aimPunchAngleVelocity;
+
+    if (std::abs(localPlayer->viewOffset().z - netvars.viewOffset.z) <= 0.25f)
+        localPlayer->viewOffset().z = netvars.viewOffset.z;
+
+    if (std::abs(viewpunch_diff) <= 0.03125f)
+        localPlayer->viewPunchAngle().x = netvars.viewPunchAngle.x;
+
+    if (abs(localPlayer->duckAmount() - netvars.duckAmount) <= 0.03125f)
+        localPlayer->duckAmount() = netvars.duckAmount;
+
+    if (std::abs(velocity_diff.x) <= 0.03125f && std::abs(velocity_diff.y) <= 0.03125f && std::abs(velocity_diff.z) <= 0.03125f)
+        localPlayer->velocity() = netvars.velocity;
+
+    if (abs(localPlayer->thirdPersonRecoil() - netvars.thirdPersonRecoil) <= 0.03125f)
+        localPlayer->thirdPersonRecoil() = netvars.thirdPersonRecoil;
+
+    if (abs(localPlayer->duckSpeed() - netvars.duckSpeed) <= 0.03125f)
+        localPlayer->duckSpeed() = netvars.duckSpeed;
+
+    if (abs(localPlayer->fallVelocity() - netvars.fallVelocity) <= 0.03125f)
+        localPlayer->fallVelocity() = netvars.fallVelocity;
+
+    if (std::abs(localPlayer->velocityModifier() - netvars.velocityModifier) <= 0.00625f)
+        localPlayer->velocityModifier() = netvars.velocityModifier;
 }
 
 int EnginePrediction::getFlags() noexcept

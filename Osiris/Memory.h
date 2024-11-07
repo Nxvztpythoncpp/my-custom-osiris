@@ -28,7 +28,11 @@ template <typename Key, typename Value>
 struct UtlMap;
 template <typename T>
 class UtlVector;
+template <typename ElementType, typename IndexType>
+struct UtlRbTree;
 
+struct SoundInfo;
+struct SplitScreen;
 struct ActiveChannels;
 struct Channel;
 struct CStudioHdr;
@@ -44,6 +48,9 @@ public:
 
     std::uintptr_t present;
     std::uintptr_t reset;
+
+    UtlRbTree<SoundInfo, int>* soundMessages;
+    SplitScreen* splitScreen;
 
     ClientMode* clientMode;
     Input* input;

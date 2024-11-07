@@ -201,8 +201,8 @@ enum class Yaw {
     off,
     forward,
     backward,
-    right,
-    left,
+    targets,
+    //left,
     spin
 };
 

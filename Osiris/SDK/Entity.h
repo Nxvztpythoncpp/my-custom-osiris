@@ -172,6 +172,13 @@ public:
         return returnValue;
     }
 
+    bool isBot()
+    {
+        if (PlayerInfo playerInfo; interfaces->engine->getPlayerInfo(index(), playerInfo))
+            return playerInfo.fakeplayer;
+        return false;
+    }
+
     float getSequenceCycleRate(int sequence) noexcept
     {
         const float t = sequenceDuration(sequence);
@@ -571,10 +578,6 @@ public:
         getPlayerName(name);
         return name;
     }
-    
-    int animlayer_count();
-
-    AnimationLayer* get_animlayers();
 
     bool canSee(Entity* other, const Vector& pos) noexcept;
     bool visibleTo(Entity* other) noexcept;
@@ -668,13 +671,6 @@ public:
         interfaces->mdlCache->endLock();
     }
 
-    bool isBot()
-    {
-        if (PlayerInfo playerInfo; interfaces->engine->getPlayerInfo(index(), playerInfo))
-            return playerInfo.fakeplayer;
-        return false;
-    }
-
     NETVAR_OFFSET(collisionChangeTime, "CCSPlayer", "m_bIsScoped", -0x50, float)
 
     NETVAR(team, "CBaseEntity", "m_iTeamNum", Team)
@@ -696,7 +692,6 @@ public:
     NETVAR(ownerEntity, "CBaseEntity", "m_hOwnerEntity", int)
     NETVAR(spotted, "CBaseEntity", "m_bSpotted", bool)
 
-    NETVAR_OFFSET(oldSimulationTime, "CBaseEntity", "m_flSimulationTime", 4, float)
     NETVAR(weapons, "CBaseCombatCharacter", "m_hMyWeapons", int[64])
     PNETVAR(wearables, "CBaseCombatCharacter", "m_hMyWearables", int)
 
@@ -716,9 +711,7 @@ public:
     NETVAR(getLadderNormal, "CBasePlayer", "m_vecLadderNormal", Vector)
     NETVAR(duckAmount, "CBasePlayer", "m_flDuckAmount", float)
     NETVAR(duckSpeed, "CBasePlayer", "m_flDuckSpeed", float)
-    NETVAR(m_vecVelocity, "CBasePlayer", "m_vecVelocity[0]", Vector);
     NETVAR(fallVelocity, "CBasePlayer", "m_flFallVelocity", float)
-    NETVAR(m_fLastShotTime, "CWeaponCSBase", "m_fLastShotTime", float)
 
     NETVAR(armor, "CCSPlayer", "m_ArmorValue", int)
     NETVAR(hasHeavyArmor, "CCSPlayer", "m_bHasHeavyArmor", bool)
@@ -805,7 +798,7 @@ public:
     }
     float getFlashTimeElapsed() noexcept
     { 
-        return std::max<float>(memory->globalVars->currenttime - getFlashStartTime(), 0.0f);
+        return max(memory->globalVars->currenttime - getFlashStartTime(), 0.0f); 
     }
 
     bool isFlashed() noexcept

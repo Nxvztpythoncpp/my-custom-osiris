@@ -3,7 +3,7 @@
 #include "../Memory.h"
 
 #include "Animations.h"
-#include "hitscan.h"
+#include "AimbotFunctions.h"
 #include "Backtrack.h"
 #include "Triggerbot.h"
 
@@ -12,6 +12,8 @@
 #include "../SDK/ModelInfo.h"
 #include "../SDK/WeaponData.h"
 #include "../SDK/WeaponId.h"
+
+static bool keyPressed;
 
 void Triggerbot::run(UserCmd* cmd) noexcept
 {
@@ -76,7 +78,6 @@ void Triggerbot::run(UserCmd* cmd) noexcept
         // Head
         hitbox[Hitboxes::Head] = (cfg.hitboxes & 1 << 0) == 1 << 0;
         // Chest
-        hitbox[Hitboxes::Neck] = (cfg.hitboxes & 1 << 0) == 1 << 1;
         hitbox[Hitboxes::UpperChest] = (cfg.hitboxes & 1 << 1) == 1 << 1;
         hitbox[Hitboxes::Thorax] = (cfg.hitboxes & 1 << 1) == 1 << 1;
         hitbox[Hitboxes::LowerChest] = (cfg.hitboxes & 1 << 1) == 1 << 1;
@@ -102,15 +103,15 @@ void Triggerbot::run(UserCmd* cmd) noexcept
             || !entity->isOtherEnemy(localPlayer.get()) && !cfg.friendlyFire || entity->gunGameImmunity())
             continue;
 
-        auto player = Animations::getPlayer(i);
+        const auto player = Animations::getPlayer(i);
         if (!player.gotMatrix)
             continue;
 
-        matrix3x4* backupBoneCache = entity->getBoneCache().memory;
-        Vector backupMins = entity->getCollideable()->obbMins();
-        Vector backupMaxs = entity->getCollideable()->obbMaxs();
-        Vector backupOrigin = entity->getAbsOrigin();
-        Vector backupAbsAngle = entity->getAbsAngle();
+        auto backupBoneCache = entity->getBoneCache().memory;
+        auto backupMins = entity->getCollideable()->obbMins();
+        auto backupMaxs = entity->getCollideable()->obbMaxs();
+        auto backupOrigin = entity->getAbsOrigin();
+        auto backupAbsAngle = entity->getAbsAngle();
 
         memcpy(entity->getBoneCache().memory, player.matrix.data(), std::clamp(entity->getBoneCache().size, 0, MAXSTUDIOBONES) * sizeof(matrix3x4));
         memory->setAbsOrigin(entity, player.origin);
@@ -143,11 +144,7 @@ void Triggerbot::run(UserCmd* cmd) noexcept
             if (!hitbox[j])
                 continue;
 
-            StudioBbox* hitbox = set->getHitbox(j);
-            if (!hitbox)
-                continue;
-
-            if (hitscan::hitboxIntersection(player.matrix.data(), j, set, startPos, endPos))
+            if (AimbotFunction::hitboxIntersection(player.matrix.data(), j, set, startPos, endPos))
             {
                 Trace trace;
                 interfaces->engineTrace->traceRay({ startPos, endPos }, 0x46004009, localPlayer.get(), trace);
@@ -160,25 +157,13 @@ void Triggerbot::run(UserCmd* cmd) noexcept
                 float damage = (activeWeapon->itemDefinitionIndex2() != WeaponId::Taser ? HitGroup::getDamageMultiplier(trace.hitgroup, weaponData, trace.entity->hasHeavyArmor(), static_cast<int>(trace.entity->getTeamNumber())) : 1.0f) * weaponData->damage * std::pow(weaponData->rangeModifier, trace.fraction * weaponData->range / 500.0f);
 
                 if (float armorRatio{ weaponData->armorRatio / 2.0f }; activeWeapon->itemDefinitionIndex2() != WeaponId::Taser && HitGroup::isArmored(trace.hitgroup, trace.entity->hasHelmet(), trace.entity->armor(), trace.entity->hasHeavyArmor()))
-                    hitscan::calculateArmorDamage(armorRatio, trace.entity->armor(), trace.entity->hasHeavyArmor(), damage);
+                    AimbotFunction::calculateArmorDamage(armorRatio, trace.entity->armor(), trace.entity->hasHeavyArmor(), damage);
 
-                const auto destination = hitscan::calculateRelativeAngle(startPos, trace.endpos, cmd->viewangles + aimPunch);
-
-                if (damage >= (cfg.killshot ? trace.entity->health() : cfg.minDamage) && 
-                    hitscan::hitChance(localPlayer.get(), entity, set, player.matrix.data(), activeWeapon, destination, cmd, cfg.hitChance))
+                if (damage >= (cfg.killshot ? trace.entity->health() : cfg.minDamage) &&
+                    AimbotFunction::hitChance(localPlayer.get(), entity, set, player.matrix.data(), activeWeapon, AimbotFunction::calculateRelativeAngle(startPos, trace.endpos, cmd->viewangles + aimPunch), cmd, cfg.hitChance))
                 {
                     cmd->buttons |= UserCmd::IN_ATTACK;
                     cmd->tickCount = timeToTicks(player.simulationTime + Backtrack::getLerp());
-
-                    if (cfg.magnet)
-                    {
-                        const auto centerHitbox = hitscan::getCenterOfHitbox(player.matrix.data(), hitbox);
-                        const auto angle = hitscan::calculateRelativeAngle(startPos, centerHitbox, cmd->viewangles + aimPunch);
-
-                        cmd->viewangles += angle;
-                        interfaces->engine->setViewAngles(cmd->viewangles);
-                    }
-
                     lastTime = 0.0f;
                     lastContact = now;
                 }
@@ -192,7 +177,7 @@ void Triggerbot::run(UserCmd* cmd) noexcept
         if (!config->backtrack.enabled)
             continue;
 
-        auto records = Animations::getBacktrackRecords(entity->index());
+        const auto records = Animations::getBacktrackRecords(entity->index());
         if (!records || records->empty())
             continue;
 
@@ -204,8 +189,8 @@ void Triggerbot::run(UserCmd* cmd) noexcept
             if (!Backtrack::valid(records->at(i).simulationTime))
                 continue;
 
-            const auto angle = hitscan::calculateRelativeAngle(startPos, records->at(i).origin, cmd->viewangles + aimPunch);
-            const auto fov = std::hypotf(angle.x, angle.y);
+            const auto angle = AimbotFunction::calculateRelativeAngle(startPos, records->at(i).origin, cmd->viewangles + aimPunch);
+            const  auto fov = std::hypotf(angle.x, angle.y);
             if (fov < bestFov) {
                 bestFov = fov;
                 bestTick = i;
@@ -215,7 +200,7 @@ void Triggerbot::run(UserCmd* cmd) noexcept
         if (bestTick <= -1)
             continue;
 
-        auto record = records->at(bestTick);
+        const auto record = records->at(bestTick);
 
         backupBoneCache = entity->getBoneCache().memory;
         backupMins = entity->getCollideable()->obbMins();
@@ -254,11 +239,7 @@ void Triggerbot::run(UserCmd* cmd) noexcept
             if (!hitbox[j])
                 continue;
 
-            StudioBbox* hitbox = set->getHitbox(j);
-            if (!hitbox)
-                continue;
-
-            if (hitscan::hitboxIntersection(record.matrix, j, set, startPos, endPos))
+            if (AimbotFunction::hitboxIntersection(record.matrix, j, set, startPos, endPos))
             {
                 Trace trace;
                 interfaces->engineTrace->traceRay({ startPos, endPos }, 0x46004009, localPlayer.get(), trace);
@@ -271,25 +252,13 @@ void Triggerbot::run(UserCmd* cmd) noexcept
                 float damage = (activeWeapon->itemDefinitionIndex2() != WeaponId::Taser ? HitGroup::getDamageMultiplier(trace.hitgroup, weaponData, trace.entity->hasHeavyArmor(), static_cast<int>(trace.entity->getTeamNumber())) : 1.0f) * weaponData->damage * std::pow(weaponData->rangeModifier, trace.fraction * weaponData->range / 500.0f);
 
                 if (float armorRatio{ weaponData->armorRatio / 2.0f }; activeWeapon->itemDefinitionIndex2() != WeaponId::Taser && HitGroup::isArmored(trace.hitgroup, trace.entity->hasHelmet(), trace.entity->armor(), trace.entity->hasHeavyArmor()))
-                    hitscan::calculateArmorDamage(armorRatio, trace.entity->armor(), trace.entity->hasHeavyArmor(), damage);
-
-                const auto destination = hitscan::calculateRelativeAngle(startPos, trace.endpos, cmd->viewangles + aimPunch);
+                    AimbotFunction::calculateArmorDamage(armorRatio, trace.entity->armor(), trace.entity->hasHeavyArmor(), damage);
 
                 if (damage >= (cfg.killshot ? trace.entity->health() : cfg.minDamage) &&
-                    hitscan::hitChance(localPlayer.get(), entity, set, record.matrix, activeWeapon, destination, cmd, cfg.hitChance))
+                    AimbotFunction::hitChance(localPlayer.get(), entity, set, record.matrix, activeWeapon, AimbotFunction::calculateRelativeAngle(startPos, trace.endpos, cmd->viewangles + aimPunch), cmd, cfg.hitChance))
                 {
                     cmd->buttons |= UserCmd::IN_ATTACK;
                     cmd->tickCount = timeToTicks(record.simulationTime + Backtrack::getLerp());
-
-                    if (cfg.magnet)
-                    {
-                        const auto centerHitbox = hitscan::getCenterOfHitbox(player.matrix.data(), hitbox);
-                        const auto angle = hitscan::calculateRelativeAngle(startPos, centerHitbox, cmd->viewangles + aimPunch);
-
-                        cmd->viewangles += angle;
-                        interfaces->engine->setViewAngles(cmd->viewangles);
-                    }
-
                     lastTime = 0.0f;
                     lastContact = now;
                 }

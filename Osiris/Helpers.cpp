@@ -13,13 +13,8 @@
 #include "Helpers.h"
 #include "Memory.h"
 
-#include "SDK/UserCmd.h"
-//#include"Interfaces.h"
-
 #include "SDK/GlobalVars.h"
 #include "SDK/Engine.h"
-
-#define M_RADPI 57.295779513082f //lol
 
 std::array<float, 3U> Helpers::rgbToHsv(float r, float g, float b) noexcept
 {
@@ -93,22 +88,6 @@ static auto rainbowColor(float time, float speed, float alpha) noexcept
                        std::sin(speed * time + 2 * pi / 3) * 0.5f + 0.5f,
                        std::sin(speed * time + 4 * pi / 3) * 0.5f + 0.5f,
                        alpha };
-}
-
-Vector Helpers::calculate_angle(const Vector& src, const Vector& dst) {
-    Vector angles;
-
-    Vector delta = src - dst;
-    float hyp = delta.length2D();
-
-    angles.y = std::atanf(delta.y / delta.x) * M_RADPI;
-    angles.x = std::atanf(-delta.z / hyp) * -M_RADPI;
-    angles.z = 0.0f;
-
-    if (delta.x >= 0.0f)
-        angles.y += 180.0f;
-
-    return angles;
 }
 
 void Helpers::logConsole(std::string_view msg, const std::array<std::uint8_t, 4> color) noexcept
@@ -209,40 +188,6 @@ float Helpers::approachValueSmooth(float target, float value, float fraction) no
     return value + delta;
 }
 
-void Helpers::angleVectors(Vector angles, Vector* forward, Vector* right, Vector* up) {
-    float angle;
-    static float sr, sp, sy, cr, cp, cy, cpi = (M_PI * 2 / 360);
-
-    angle = angles.x * cpi;
-    sy = sin(angle);
-    cy = cos(angle);
-    angle = angles.y * cpi;
-    sp = sin(angle);
-    cp = cos(angle);
-    angle = angles.z * cpi;
-    sr = sin(angle);
-    cr = cos(angle);
-
-    if (forward) {
-        forward->y = (cp * cy);
-        forward->x = cp * sy;
-        forward->z = -sp;
-    }
-
-    if (right) {
-        right->y = (-1 * sr * sp * cy + -1 * cr * -sy);
-        right->x = (-1 * sr * sp * sy + -1 * cr * cy);
-        right->z = -1 * sr * cp;
-    }
-
-    if (up) {
-        up->y = (cr * sp * cy + -sr * -sy);
-        up->x = (cr * sp * sy + -sr * cy);
-        up->z = cr * cp;
-    }
-}
-
-
 float Helpers::angleDiff(float destAngle, float srcAngle) noexcept
 {
     float delta = std::fmodf(destAngle - srcAngle, 360.0f);
@@ -286,39 +231,6 @@ float Helpers::angleNormalize(float angle) noexcept
         angle += 360.f;
 
     return angle;
-}
-
-void Helpers::AngleVectors(Vector angles, Vector* forward, Vector* right, Vector* up) {
-    float angle;
-    static float sr, sp, sy, cr, cp, cy, cpi = (M_PI * 2 / 360);
-
-    angle = angles.x * cpi;
-    sy = sin(angle);
-    cy = cos(angle);
-    angle = angles.y * cpi;
-    sp = sin(angle);
-    cp = cos(angle);
-    angle = angles.z * cpi;
-    sr = sin(angle);
-    cr = cos(angle);
-
-    if (forward) {
-        forward->y = (cp * cy);
-        forward->x = cp * sy;
-        forward->z = -sp;
-    }
-
-    if (right) {
-        right->y = (-1 * sr * sp * cy + -1 * cr * -sy);
-        right->x = (-1 * sr * sp * sy + -1 * cr * cy);
-        right->z = -1 * sr * cp;
-    }
-
-    if (up) {
-        up->y = (cr * sp * cy + -sr * -sy);
-        up->x = (cr * sp * sy + -sr * cy);
-        up->z = cr * cp;
-    }
 }
 
 float Helpers::approachAngle(float target, float value, float speed) noexcept
@@ -373,17 +285,6 @@ float Helpers::normalizeYaw(float yaw) noexcept
 
     yaw = (yaw < 0.f) ? yaw + (360.f * rot) : yaw - (360.f * rot);
     return yaw;
-}
-
-float Helpers::normalize_pitch(float pitch)
-{
-    while (pitch > 89.0f)
-        pitch -= 180.0f;
-
-    while (pitch < -89.0f)
-        pitch += 180.0f;
-
-    return pitch;
 }
 
 bool Helpers::worldToScreen(const Vector& in, ImVec2& out, bool floor) noexcept
@@ -537,8 +438,3 @@ std::vector<char> Helpers::loadBinaryFile(const std::string& path) noexcept
     in.read(result.data(), result.size());
     return result;
 }
-
-bool Helpers::IsNearEqual(float v1, float v2, float Tolerance)
-{
-    return std::abs(v1 - v2) <= std::abs(Tolerance);
-};

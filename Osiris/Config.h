@@ -37,14 +37,13 @@ public:
         bool aimlock{ false };
         bool silent{ false };
         bool friendlyFire{ false };
-        bool visibleOnly{ false };
-        bool scopedOnly{ false };
-        bool ignoreFlash{ true };
-        bool ignoreSmoke{ true };
+        bool visibleOnly{ true };
+        bool scopedOnly{ true };
+        bool ignoreFlash{ false };
+        bool ignoreSmoke{ false };
         bool autoShot{ false };
         bool autoScope{ false };
         bool autoStop{ false };
-        bool fps_optimization{ false };
         bool disableMultipointIfLowFPS{ false };
         bool disableBacktrackIfLowFPS{ false };
         bool betweenShots{ false };
@@ -66,63 +65,24 @@ public:
         int limit = 1;
     } fakelag;
 
-    struct AntiAimConditions {
-        bool global = false;
-        bool moving = false;
-        bool slowwalk = false;
-        bool jumping = false;
-        bool cjump = false;
-        bool onUse = false;
-        bool chrouch = false;
-        ColorToggleOutline visualize{ 1.0f , 1.0f , 1.0f , 0.5f };
-        float visualizeOffset = 100.f;
-        int visualizeType = 0;
-        float visualizeSize = 35.f;
-        int animBreakers = 0;
-    }condAA;
     struct RageAntiAimConfig {
+        bool enabled = false;
         int pitch = 0; //Off, Down, Zero, Up
+        int PitchJitterRange = {0};
         Yaw yawBase = Yaw::off;
+        KeyBind 
+            manualForward{ std::string("manual forward"), KeyMode::Off },
+            manualBackward{ std::string("manual backward"), KeyMode::Off },
+            manualRight{ std::string("manual right"), KeyMode::Off },
+            manualLeft{ std::string("manual left"), KeyMode::Off };
         int yawModifier = 0; //Off, Jitter
         int yawAdd = 0; //-180/180
-        float spinBase = 0; //-180/180
+        int spinBase = 0; //-180/180
         int jitterRange = 0;
-        int tickDelays = 2;
-        int randomRange = 0;
         bool atTargets = false;
-        bool fakeFlick{ false };
-        int fakeFlickRate = 16;
-        bool freestand{ false };
-        //desync
-        int leftLimit = 60;
-        int rightLimit = 60;
-        int peekMode = 0; //Off, Peek real, Peek fake, jitter
-        int lbyMode = 0; // Normal, Opposite, sway
-        bool desync = false;
-        struct Roll {
-            bool enabled{ false };
-            float offset = 0;
-            float pitch = 0;
-            float add = 0;
-            bool exploitPitch{ false };
-            float epAmnt{ 0 };
-        };
-        Roll roll;
-    };
-    std::array<RageAntiAimConfig, 6> rageAntiAim;
-    bool disableInFreezetime{ true };
-    KeyBind hitchanceOverride{ std::string("Hitchance ovr"), KeyMode::Off };
-    KeyBind manualForward{ std::string("Manual forward"), KeyMode::Off },
-        manualBackward{ std::string("Manual backward"), KeyMode::Off },
-        manualRight{ std::string("Manual right"), KeyMode::Off },
-        manualLeft{ std::string("Manual left"), KeyMode::Off };
-    KeyBind freestandKey{ std::string("Freestand") };
-    KeyBind flipFlick{ std::string("Fake flick flipped") };
-    KeyBind fakeFlickOnKey{ std::string("Fake flick") };
-    KeyBind invert{ std::string("AA invert") };
+        KeyBind Freestand{ std::string("Freestand")};
+    } rageAntiAim;
 
-
-    /*
     struct FakeAngle {
         bool enabled = false;
         KeyBind invert{ std::string("fake angle invert") };
@@ -131,12 +91,10 @@ public:
         int peekMode = 0; //Off, Peek real, Peek fake
         int lbyMode = 0; // Normal, Opposite, sway, 
     } fakeAngle;
-    */
-
 
     struct Tickbase {
-        KeyBind doubletap{ std::string("Double Tap"), KeyMode::Off };
-        KeyBind hideshots{ std::string("Hide Shots"), KeyMode::Off };
+        KeyBind doubletap{ std::string("doubletap"), KeyMode::Off };
+        KeyBind hideshots{ std::string("hideshots"), KeyMode::Off };
         bool teleport{ true };
     } tickbase;
 
@@ -146,10 +104,7 @@ public:
         KeyBind invert{ std::string("legit aa invert") };
     } legitAntiAim;
 
-
-    
-    
-
+    bool disableInFreezetime{ true };
 
     struct Legitbot {
         bool enabled{ false };
@@ -318,7 +273,7 @@ public:
             float rotationIntensity{ 1.0f };
             float strength{ 1.0f };
         } motionBlur;
-
+        
         struct FootstepESP {
             ColorToggle footstepBeams{ 0.2f, 0.5f, 1.f, 1.0f };
             int footstepBeamRadius = 0;
@@ -334,7 +289,7 @@ public:
         float bulletImpactsTime{ 4.f };
         int playerModelT{ 0 };
         int playerModelCT{ 0 };
-        char playerModel[256]{ };
+        char playerModel[256] { };
         bool disableJiggleBones{ false };
         BulletTracers bulletTracers;
         ColorToggle molotovHull{ 1.0f, 0.27f, 0.0f, 0.3f };
@@ -348,19 +303,19 @@ public:
         } molotovPolygon;
         struct Viewmodel
         {
-            bool enabled{ false };
+            bool enabled { false };
             int fov{ 0 };
-            float x{ 0.0f };
-            float y{ 0.0f };
-            float z{ 0.0f };
-            float roll{ 0.0f };
+            float x { 0.0f };
+            float y { 0.0f };
+            float z { 0.0f };
+            float roll { 0.0f };
         } viewModel;
         struct OnHitHitbox
         {
             ColorToggle color{ 1.f, 1.f, 1.f, 1.f };
             float duration = 2.f;
         } onHitHitbox;
-        ColorToggleOutline spreadCircle{ 1.0f, 1.0f, 1.0f, 0.25f };
+        ColorToggleOutline spreadCircle { 1.0f, 1.0f, 1.0f, 0.25f };
         int asusWalls = 100;
         int asusProps = 100;
         bool smokeTimer{ false };
@@ -442,7 +397,7 @@ public:
         char clanTag[16];
         char name[16];
         ColorToggleThickness noscopeCrosshair;
-        ColorToggleThickness recoilCrosshair;
+        ColorToggleThickness recoilCrosshair; 
         ColorToggleThickness headshotLine;
         ColorToggleThickness nadeDamagePredict;
         Color4 nadeTrailPredict;
@@ -474,7 +429,7 @@ public:
         ColorToggle3 logger;
 
         struct Watermark {
-            bool enabled = true;
+            bool enabled = false;
             ImVec2 pos;
         };
         Watermark watermark;

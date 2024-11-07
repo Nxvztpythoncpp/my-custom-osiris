@@ -10,7 +10,6 @@ public:
     GUI() noexcept;
     void render() noexcept;
     ImFont* getTahoma28Font() const noexcept;
-    ImFont* grenades() const noexcept;
     ImFont* getUnicodeFont() const noexcept;
     void handleToggle() noexcept;
     bool isOpen() noexcept { return open; }
@@ -22,8 +21,7 @@ private:
     void renderRagebotWindow() noexcept;
     void renderTriggerbotWindow() noexcept;
     void renderFakelagWindow() noexcept;
-    void renderDefensiveWindow() noexcept;
-    void renderMovementWindow() noexcept;
+    void renderLegitAntiAimWindow() noexcept;
     void renderRageAntiAimWindow() noexcept;
     void renderFakeAngleWindow() noexcept;
     void renderBacktrackWindow() noexcept;
@@ -38,7 +36,6 @@ private:
     struct {
         ImFont* normal15px = nullptr;
         ImFont* tahoma28 = nullptr;
-        ImFont* nades = nullptr;
         ImFont* tahoma34 = nullptr;
         ImFont* unicodeFont = nullptr;
     } fonts;

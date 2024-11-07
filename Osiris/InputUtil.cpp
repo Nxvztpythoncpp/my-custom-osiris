@@ -276,10 +276,10 @@ void KeyBind::showKeybind() noexcept
     switch (keyMode)
     {
     case KeyMode::Hold:
-        ImGui::TextWrapped("%s %s", "[hold]", this->activeName.c_str());
+        ImGui::TextWrapped("%s %s", "Holding - ", this->activeName.c_str());
         break;
     case KeyMode::Toggle:
-        ImGui::TextWrapped("%s %s", "[toggled]", this->activeName.c_str());
+        ImGui::TextWrapped("%s %s", "Toggled - ", this->activeName.c_str());
         break;
     default:
         break;

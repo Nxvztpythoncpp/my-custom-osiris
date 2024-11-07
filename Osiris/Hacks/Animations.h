@@ -4,7 +4,6 @@
 #include "../SDK/Entity.h"
 #include "../SDK/FrameStage.h"
 #include "../SDK/ModelInfo.h"
-#include "../SDK/Vector.h"
 
 #include <array>
 #include <deque>
@@ -67,6 +66,7 @@ namespace Animations
 			Vector absAngle;
 			Vector mins;
 			Vector maxs;
+			Vector velocity;
 			float simulationTime;
 			matrix3x4 matrix[MAXSTUDIOBONES];
 		};
@@ -74,37 +74,31 @@ namespace Animations
 		std::deque<Record> backtrackRecords;
 
 		std::array<matrix3x4, MAXSTUDIOBONES> matrix;
-		std::array<AnimationLayer, 13> layers{ };
-		std::array<AnimationLayer, 13> oldlayers{ };
+		std::array<AnimationLayer, 13> layers { };
+		std::array<AnimationLayer, 13> oldlayers { };
 
 		Vector mins{}, maxs{};
 		Vector origin{}, oldOrigin{}, absAngle{};
 		Vector velocity{}, oldVelocity{};
 
 		float spawnTime{ 0.f };
+		float workingangle = 0.f;
+		bool extended{ false };
+		int side{ 0 };
+		bool shot{ false };
 
 		float simulationTime{ -1.0f };
 		int chokedPackets{ 0 };
 		int misses{ 0 };
 		bool gotMatrix{ false };
-		
-		
-		//custom for shitsolver
-		bool shot{ false };
-		float workingangle = 0.f;
-		int rotation_mode = 0;
-		int side{};
-		bool extended{ false };
-		bool anim_resolved{ false };
-		int rotation_side = 0;
-		int last_side = 0;
-		//end
-
 
 		float moveWeight{ 0.0f };
 
 		float duckAmount{ 0.0f };
 		float oldDuckAmount{ 0.0f };
+
+		float m_flLowerBodyYawTarget { 0.0f };
+		float eye_yaw { 0.0f };
 
 		int flags{ 0 };
 
@@ -126,6 +120,8 @@ namespace Animations
 			oldVelocity = Vector{};
 			mins = Vector{};
 			maxs = Vector{};
+			m_flLowerBodyYawTarget = { 0.0f };
+			eye_yaw = { 0.0f};
 
 			backtrackRecords.clear();
 		}

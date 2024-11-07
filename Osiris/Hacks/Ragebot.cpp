@@ -2,7 +2,7 @@
 #include "../Interfaces.h"
 #include "../Memory.h"
 
-#include "hitscan.h"
+#include "AimbotFunctions.h"
 #include "Animations.h"
 #include "Backtrack.h"
 #include "Ragebot.h"
@@ -17,6 +17,7 @@
 #include "../SDK/GlobalVars.h"
 #include "../SDK/LocalPlayer.h"
 #include "../SDK/ModelInfo.h"
+#include <DirectXMath.h>
 
 static bool keyPressed = false;
 
@@ -26,7 +27,7 @@ void Ragebot::updateInput() noexcept
     config->minDamageOverrideKey.handleToggle();
 }
 
-void runRagebot(UserCmd* cmd, Entity* entity, matrix3x4* matrix, Ragebot::Enemies target, std::array<bool, Hitboxes::Max> hitbox, Entity* activeWeapon, int weaponIndex, Vector localPlayerEyePosition, Vector aimPunch, int multiPoint, int minDamage, float& damageDiff, Vector& bestAngle, Vector& bestTarget) noexcept
+void runRagebot(UserCmd* cmd, Entity* entity, Animations::Players::Record record, Ragebot::Enemies target, std::array<bool, Hitboxes::Max> hitbox, Entity* activeWeapon, int weaponIndex, Vector localPlayerEyePosition, Vector aimPunch, int multiPoint, int minDamage, float& damageDiff, Vector& bestAngle, Vector& bestTarget, int& bestIndex, float& bestSimulationTime) noexcept
 {
     const auto& cfg = config->ragebot;
 
@@ -53,17 +54,14 @@ void runRagebot(UserCmd* cmd, Entity* entity, matrix3x4* matrix, Ragebot::Enemie
         if (!hitbox)
             continue;
 
-        for (auto& bonePosition : hitscan::multiPoint(entity, matrix, hitbox, localPlayerEyePosition, i, multiPoint))
+        for (auto& bonePosition : AimbotFunction::multiPoint(entity, record.matrix, hitbox, localPlayerEyePosition, i, multiPoint))
         {
-            const auto angle{ hitscan::calculateRelativeAngle(localPlayerEyePosition, bonePosition, cmd->viewangles + aimPunch) };
+            const auto angle{ AimbotFunction::calculateRelativeAngle(localPlayerEyePosition, bonePosition, cmd->viewangles + aimPunch) };
             const auto fov{ angle.length2D() };
             if (fov > cfg[weaponIndex].fov)
                 continue;
 
-            if (!cfg[weaponIndex].ignoreSmoke && memory->lineGoesThroughSmoke(localPlayerEyePosition, bonePosition, 1))
-                continue;
-
-            float damage = hitscan::getScanDamage(entity, bonePosition, activeWeapon->getWeaponData(), minDamage, cfg[weaponIndex].friendlyFire);
+            float damage = AimbotFunction::getScanDamage(entity, bonePosition, activeWeapon->getWeaponData(), minDamage, cfg[weaponIndex].friendlyFire);
             damage = std::clamp(damage, 0.0f, (float)entity->maxHealth());
             if (damage <= 0.f)
                 continue;
@@ -77,14 +75,52 @@ void runRagebot(UserCmd* cmd, Entity* entity, matrix3x4* matrix, Ragebot::Enemie
             if (cfg[weaponIndex].scopedOnly && activeWeapon->isSniperRifle() && !localPlayer->isScoped())
                 return;
 
-            if (cfg[weaponIndex].autoStop && localPlayer->flags() & 1 && !(cmd->buttons & UserCmd::IN_JUMP))
+            if (cfg[weaponIndex].autoStop && localPlayer->flags() & 1 && !(cmd->buttons & UserCmd::IN_JUMP) && (cmd->buttons & UserCmd::IN_ATTACK || cfg[weaponIndex].autoShot))
             {
-                const auto velocity = EnginePrediction::getVelocity();
+                auto VectorAngles = [](const Vector& vecForward, Vector& vecAngles)
+                    {
+                        float flTemp, flYaw, flPitch;
+
+                        if (vecForward.y == 0 && vecForward.x == 0)
+                        {
+                            flYaw = 0;
+
+                            flPitch = 90;
+                            if (vecForward.z > 0)
+                                flPitch = 270;
+                        }
+                        else
+                        {
+                            flYaw = (atan2(vecForward.y, vecForward.x) * 180 / DirectX::XM_PI);
+                            if (flYaw < 0)
+                                flYaw += 360;
+
+                            flTemp = sqrt(vecForward.x * vecForward.x + vecForward.y * vecForward.y);
+                            flPitch = (atan2(-vecForward.z, flTemp) * 180 / DirectX::XM_PI);
+                            if (flPitch < 0)
+                                flPitch += 360;
+                        }
+
+                        vecAngles.x = flPitch;
+                        vecAngles.y = flYaw;
+                        vecAngles.z = 0;
+                    };
+#define DEG2RAD(x) DirectX::XMConvertToRadians( x )
+                auto AngleVectors = [](const Vector& vecAngles, Vector& vecForward)
+                    {
+                        float sp, sy, cp, cy;
+
+                        DirectX::XMScalarSinCos(&sp, &cp, DEG2RAD(vecAngles[0]));
+                        DirectX::XMScalarSinCos(&sy, &cy, DEG2RAD(vecAngles[1]));
+
+                        vecForward.x = cp * cy;
+                        vecForward.y = cp * sy;
+                        vecForward.z = -sp;
+                    };
+
+                /*const auto velocity = EnginePrediction::getVelocity();
                 const auto speed = velocity.length2D();
-                const auto activeWeapon = localPlayer->getActiveWeapon();
-                const auto weaponData = activeWeapon->getWeaponData();
-                const float maxSpeed = (localPlayer->isScoped() ? weaponData->maxSpeedAlt : weaponData->maxSpeed) / 3;
-                if (speed >= maxSpeed)
+                if (speed >= 15.0f)
                 {
                     Vector direction = velocity.toAngle();
                     direction.y = cmd->viewangles.y - direction.y;
@@ -92,7 +128,57 @@ void runRagebot(UserCmd* cmd, Entity* entity, matrix3x4* matrix, Ragebot::Enemie
                     const auto negatedDirection = Vector::fromAngle(direction) * -speed;
                     cmd->forwardmove = negatedDirection.x;
                     cmd->sidemove = negatedDirection.y;
+                }*/
+
+
+                const auto velocity = EnginePrediction::getVelocity();
+                const auto speed = velocity.length2D();
+
+                auto max_speed = 0.33f * (localPlayer->isScoped() ? localPlayer->getActiveWeapon()->getWeaponData()->maxSpeedAlt : localPlayer->getActiveWeapon()->getWeaponData()->maxSpeed);
+
+                if (speed >= 15.0f)
+                {
+                    Vector direction;
+                    Vector real_view;
+
+                    VectorAngles(EnginePrediction::getVelocity(), direction);
+                    interfaces->engine->getViewAngles(real_view);
+
+                    direction.y = real_view.y - direction.y;
+
+                    Vector forward;
+                    AngleVectors(direction, forward);
+
+                    static auto cl_forwardspeed = interfaces->cvar->findVar(("cl_forwardspeed"));
+                    static auto cl_sidespeed = interfaces->cvar->findVar(("cl_sidespeed"));
+
+                    auto negative_forward_speed = -cl_forwardspeed->getFloat();
+                    auto negative_side_speed = -cl_sidespeed->getFloat();
+
+                    auto negative_forward_direction = forward * negative_forward_speed;
+                    auto negative_side_direction = forward * negative_side_speed;
+
+                    cmd->forwardmove = negative_forward_direction.x;
+                    cmd->sidemove = negative_side_direction.y;
                 }
+
+                /*const auto weapon = localPlayer->getActiveWeapon();
+if (weapon) {
+    const auto info = localPlayer->getActiveWeapon()->getWeaponData();
+    float speed = localPlayer->isScoped() ? info->maxSpeedAlt : info->maxSpeed;
+    if (info) {
+        speed /= 5.5f;
+        float min_speed = (float)(sqrt(pow(cmd->forwardmove, 2) + pow(cmd->sidemove, 2) + pow(cmd->upmove, 2)));
+
+        if (min_speed > speed && min_speed > 0.f)
+        {
+            float ratio = speed / (min_speed + 10);
+            cmd->forwardmove *= ratio;
+            cmd->sidemove *= ratio;
+            cmd->upmove *= ratio;
+        }
+    }
+}*/
             }
 
             if (std::fabsf((float)target.health - damage) <= damageDiff)
@@ -100,16 +186,20 @@ void runRagebot(UserCmd* cmd, Entity* entity, matrix3x4* matrix, Ragebot::Enemie
                 bestAngle = angle;
                 damageDiff = std::fabsf((float)target.health - damage);
                 bestTarget = bonePosition;
+                bestSimulationTime = record.simulationTime;
+                bestIndex = target.id;
             }
         }
     }
 
     if (bestTarget.notNull())
     {
-        if (!hitscan::hitChance(localPlayer.get(), entity, set, matrix, activeWeapon, bestAngle, cmd, cfg[weaponIndex].hitChance))
+        if (!AimbotFunction::hitChance(localPlayer.get(), entity, set, record.matrix, activeWeapon, bestAngle, cmd, cfg[weaponIndex].hitChance))
         {
             bestTarget = Vector{ };
             bestAngle = Vector{ };
+            bestIndex = -1;
+            bestSimulationTime = 0;
             damageDiff = FLT_MAX;
         }
     }
@@ -144,9 +234,6 @@ void Ragebot::run(UserCmd* cmd) noexcept
         weaponIndex = 0;
 
     if (!cfg[weaponIndex].betweenShots && activeWeapon->nextPrimaryAttack() > memory->globalVars->serverTime())
-        return;
-
-    if (!cfg[weaponIndex].ignoreFlash && localPlayer->isFlashed())
         return;
 
     if (!(cfg[weaponIndex].enabled && (cmd->buttons & UserCmd::IN_ATTACK || cfg[weaponIndex].autoShot || cfg[weaponIndex].aimlock)))
@@ -195,11 +282,12 @@ void Ragebot::run(UserCmd* cmd) noexcept
             || !entity->isOtherEnemy(localPlayer.get()) && !cfg[weaponIndex].friendlyFire || entity->gunGameImmunity())
             continue;
 
-        const auto angle{ hitscan::calculateRelativeAngle(localPlayerEyePosition, player.matrix[8].origin(), cmd->viewangles + aimPunch) };
+        const auto angle{ AimbotFunction::calculateRelativeAngle(localPlayerEyePosition, player.matrix[8].origin(), cmd->viewangles + aimPunch) };
         const auto origin{ entity->getAbsOrigin() };
         const auto fov{ angle.length2D() }; //fov
         const auto health{ entity->health() }; //health
         const auto distance{ localPlayerOrigin.distTo(origin) }; //distance
+
         enemies.emplace_back(i, health, distance, fov);
     }
 
@@ -225,93 +313,79 @@ void Ragebot::run(UserCmd* cmd) noexcept
     frameRate = 0.9f * frameRate + 0.1f * memory->globalVars->absoluteFrameTime;
 
     auto multiPoint = cfg[weaponIndex].multiPoint;
-    if (cfg[weaponIndex].disableMultipointIfLowFPS && static_cast<int>(1 / frameRate) <= 1 / memory->globalVars->intervalPerTick)
+    if (cfg[weaponIndex].disableMultipointIfLowFPS && static_cast<int>(1 / frameRate) <= 60)
         multiPoint = 0;
 
-    for (const auto& target : enemies) 
+    for (const auto& target : enemies)
     {
-        auto entity{ interfaces->entityList->getEntity(target.id) };
-        auto player = Animations::getPlayer(target.id);
-        int minDamage = std::clamp(std::clamp(config->minDamageOverrideKey.isActive() ? cfg[weaponIndex].minDamageOverride : cfg[weaponIndex].minDamage, 0, target.health), 0, activeWeapon->getWeaponData()->damage);
+        const auto entity{ interfaces->entityList->getEntity(target.id) };
+        const auto player = Animations::getPlayer(target.id);
+        const int minDamage = std::clamp(std::clamp(config->minDamageOverrideKey.isActive() ? cfg[weaponIndex].minDamageOverride : cfg[weaponIndex].minDamage, 0, target.health), 0, activeWeapon->getWeaponData()->damage);
 
-        matrix3x4* backupBoneCache = entity->getBoneCache().memory;
-        Vector backupMins = entity->getCollideable()->obbMins();
-        Vector backupMaxs = entity->getCollideable()->obbMaxs();
-        Vector backupOrigin = entity->getAbsOrigin();
-        Vector backupAbsAngle = entity->getAbsAngle();
+        const auto backupBoneCache = entity->getBoneCache().memory;
+        const auto backupMins = entity->getCollideable()->obbMins();
+        const auto backupMaxs = entity->getCollideable()->obbMaxs();
+        const auto backupOrigin = entity->getAbsOrigin();
+        const auto backupAbsAngle = entity->getAbsAngle();
 
         for (int cycle = 0; cycle < 2; cycle++)
         {
-            float currentSimulationTime = -1.0f;
-
-            if (config->backtrack.enabled)
+            Animations::Players::Record record;
+            if (cycle == 0)
             {
+                if (!Backtrack::valid(player.simulationTime))
+                    continue;
+                record.absAngle = player.absAngle;
+                std::copy(player.matrix.begin(), player.matrix.end(), record.matrix);
+                record.maxs = player.maxs;
+                record.mins = player.mins;
+                record.origin = player.origin;
+                record.simulationTime = player.simulationTime;
+            }
+            else
+            {
+                if (cfg[weaponIndex].disableBacktrackIfLowFPS && static_cast<int>(1 / frameRate) <= 60)
+                    continue;
+
+                if (!config->backtrack.enabled)
+                    continue;
+
                 const auto records = Animations::getBacktrackRecords(entity->index());
                 if (!records || records->empty())
                     continue;
 
-                int bestTick = -1;
-                if (cycle == 0)
+                int lastTick = -1;
+
+                for (int i = static_cast<int>(records->size() - 1); i >= 0; i--)
                 {
-                    for (size_t i = 0; i < records->size(); i++)
+                    if (Backtrack::valid(records->at(i).simulationTime))
                     {
-                        if (Backtrack::valid(records->at(i).simulationTime))
-                        {
-                            bestTick = static_cast<int>(i);
-                            break;
-                        }
-                    }
-                }
-                else
-                {
-                    for (int i = static_cast<int>(records->size() - 1U); i >= 0; i--)
-                    {
-                        if (Backtrack::valid(records->at(i).simulationTime))
-                        {
-                            bestTick = i;
-                            break;
-                        }
+                        lastTick = i;
+                        break;
                     }
                 }
 
-                if (bestTick <= -1)
+                if (lastTick <= -1)
                     continue;
 
-                memcpy(entity->getBoneCache().memory, records->at(bestTick).matrix, std::clamp(entity->getBoneCache().size, 0, MAXSTUDIOBONES) * sizeof(matrix3x4));
-                memory->setAbsOrigin(entity, records->at(bestTick).origin);
-                memory->setAbsAngle(entity, Vector{ 0.f, records->at(bestTick).absAngle.y, 0.f });
-                memory->setCollisionBounds(entity->getCollideable(), records->at(bestTick).mins, records->at(bestTick).maxs);
-
-                currentSimulationTime = records->at(bestTick).simulationTime;
-            }
-            else
-            {
-                //We skip backtrack
-                if (cycle == 1)
-                    continue;
-
-                memcpy(entity->getBoneCache().memory, player.matrix.data(), std::clamp(entity->getBoneCache().size, 0, MAXSTUDIOBONES) * sizeof(matrix3x4));
-                memory->setAbsOrigin(entity, player.origin);
-                memory->setAbsAngle(entity, Vector{ 0.f, player.absAngle.y, 0.f });
-                memory->setCollisionBounds(entity->getCollideable(), player.mins, player.maxs);
-
-                currentSimulationTime = player.simulationTime;
+                record = records->at(lastTick);
             }
 
-            runRagebot(cmd, entity, entity->getBoneCache().memory, target, hitbox, activeWeapon, weaponIndex, localPlayerEyePosition, aimPunch, multiPoint, minDamage, damageDiff, bestAngle, bestTarget);
+            memcpy(entity->getBoneCache().memory, record.matrix, std::clamp(entity->getBoneCache().size, 0, MAXSTUDIOBONES) * sizeof(matrix3x4));
+            memory->setAbsOrigin(entity, record.origin);
+            memory->setAbsAngle(entity, Vector{ 0.f, record.absAngle.y, 0.f });
+            entity->getCollideable()->setCollisionBounds(record.mins, record.maxs);
+
+            runRagebot(cmd, entity, record, target, hitbox, activeWeapon, weaponIndex, localPlayerEyePosition, aimPunch, multiPoint, minDamage, damageDiff, bestAngle, bestTarget, bestIndex, bestSimulationTime);
             resetMatrix(entity, backupBoneCache, backupOrigin, backupAbsAngle, backupMins, backupMaxs);
             if (bestTarget.notNull())
-            {
-                bestSimulationTime = currentSimulationTime;
-                bestIndex = target.id;
                 break;
-            }
         }
         if (bestTarget.notNull())
             break;
     }
 
-    if (bestTarget.notNull()) 
+    if (bestTarget.notNull())
     {
         static Vector lastAngles{ cmd->viewangles };
         static int lastCommand{ };
@@ -319,7 +393,7 @@ void Ragebot::run(UserCmd* cmd) noexcept
         if (lastCommand == cmd->commandNumber - 1 && lastAngles.notNull() && cfg[weaponIndex].silent)
             cmd->viewangles = lastAngles;
 
-        auto angle = hitscan::calculateRelativeAngle(localPlayerEyePosition, bestTarget, cmd->viewangles + aimPunch);
+        auto angle = AimbotFunction::calculateRelativeAngle(localPlayerEyePosition, bestTarget, cmd->viewangles + aimPunch);
         bool clamped{ false };
 
         if (std::abs(angle.x) > config->misc.maxAngleDelta || std::abs(angle.y) > config->misc.maxAngleDelta) {
@@ -328,15 +402,14 @@ void Ragebot::run(UserCmd* cmd) noexcept
             clamped = true;
         }
 
-        if (activeWeapon->nextPrimaryAttack() <= memory->globalVars->serverTime())
-        {
-            cmd->viewangles += angle;
-            if (!cfg[weaponIndex].silent)
-                interfaces->engine->setViewAngles(cmd->viewangles);
+        cmd->viewangles += angle;
+        if (!cfg[weaponIndex].silent)
+            interfaces->engine->setViewAngles(cmd->viewangles);
 
-            if (cfg[weaponIndex].autoShot && !clamped)
-                cmd->buttons |= UserCmd::IN_ATTACK;
-        }
+        if (cfg[weaponIndex].autoShot && activeWeapon->readyTime() <= memory->globalVars->serverTime() && !clamped)
+            cmd->buttons |= UserCmd::IN_ATTACK2;
+        else
+            cmd->buttons |= UserCmd::IN_ATTACK;
 
         if (clamped)
             cmd->buttons &= ~UserCmd::IN_ATTACK;

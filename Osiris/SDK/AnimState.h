@@ -10,7 +10,6 @@
 #include "Pad.h"
 #include "Vector.h"
 
-#define	FL_ONGROUND				(1<<0)
 #define CS_PLAYER_SPEED_RUN 260.f
 #define CS_PLAYER_SPEED_WALK_MODIFIER 0.52f
 #define CS_PLAYER_SPEED_DUCK_MODIFIER 0.34f
@@ -50,6 +49,18 @@
 #define FIRSTPERSON_TO_THIRDPERSON_VERTICAL_TOLERANCE_MIN 4.0f
 #define FIRSTPERSON_TO_THIRDPERSON_VERTICAL_TOLERANCE_MAX 10.0f
 
+#define	FL_ONGROUND				(1<<0)	// At rest / on the ground
+#define FL_DUCKING				(1<<1)	// Player flag -- Player is fully crouched
+#define	FL_WATERJUMP			(1<<2)	// player jumping out of water
+#define FL_ONTRAIN				(1<<3) // Player is _controlling_ a train, so movement commands should be ignored on client during prediction.
+#define FL_INRAIN				(1<<4)	// Indicates the entity is standing in rain
+#define FL_FROZEN				(1<<5) // Player is frozen for 3rd person camera
+#define FL_ATCONTROLS			(1<<6) // Player can't move, but keeps key inputs for controlling another entity
+#define	FL_CLIENT				(1<<7)	// Is a player
+#define FL_FAKECLIENT			(1<<8)	// Fake client, simulated server side; don't send network messages to them
+// NON-PLAYER SPECIFIC (i.e., not used by GameMovement or the client .dll ) -- Can still be applied to players, though
+#define	FL_INWATER				(1<<9)	// In water
+
 struct animstatePoseParamCache
 {
 public:
@@ -71,25 +82,6 @@ struct proceduralFoot
 	float lockAmount;
 	float lastPlantTime;
 };//Size: 0x38(56)
-
-enum rotationSideResolver
-{
-	ROTATION_SIDE_NONE = 0,
-	ROTATION_SIDE_CENTER,
-	ROTATION_SIDE_LEFT,
-	ROTATION_SIDE_RIGHT,
-	ROTATION_SIDE_LOW_LEFT,
-	ROTATION_SIDE_LOW_RIGHT,
-};
-
-enum rotationModeResolver
-{
-	ROTATION_NONE = 0,
-	ROTATION_STAND,
-	ROTATION_SLOW,
-	ROTATION_MOVE,
-	ROTATION_AIR
-};
 
 
 //T means in theory
@@ -131,7 +123,6 @@ struct AnimState //This is the client one
 	Vector					vecVelocityNormalizedNonZero; //T 224(X),228(Y),232(Z)
 	float					velocityLengthXY; //236 = 0xEC
 	float					velocityLengthZ; // T 240
-
 
 	float					speedAsPortionOfRunTopSpeed; //T 244
 	float					speedAsPortionOfWalkTopSpeed; //T 248
@@ -229,8 +220,10 @@ struct AnimState //This is the client one
 	bool deployRateLimiting;
 	bool jumping;
 	int buttons;
-	bool rolled;
-	Vector rolledPosition;
+
+	float FeetYawRate;
+	float m_flTimeSinceStartedMoving; //0x100
+
 
 	void setupVelocity() noexcept;
 	void setupMovement() noexcept;
@@ -261,11 +254,6 @@ struct AnimState //This is the client one
 
 	int getTicksFromCycle(float playbackRate, float cycle, float previousCycle) noexcept;
 	float calculatePlaybackRate(Vector velocity) noexcept;
-
-	float& time_since_in_air()
-	{
-		return *(float*)((uintptr_t)this + 0x110);
-	}
 };
 
 enum animEvent

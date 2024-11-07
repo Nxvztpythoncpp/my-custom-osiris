@@ -7,28 +7,15 @@ struct Vector;
 
 namespace AntiAim
 {
-    bool r8Working = false;
-    enum moving_flag
-    {
-        freestanding = 0,
-        moving = 1,
-        jumping = 2,
-        ducking = 3,
-        duck_jumping = 4,
-        slow_walking = 5,
-        on_use = 6
-    };
-    inline moving_flag latest_moving_flag{};
+    float breakLC(bool& sendPacket) noexcept;
+    float getLBYUpdate() noexcept;
+    float getYawAtTargets( const Vector& viewangles) noexcept;
+    float freestand(UserCmd* cmd) noexcept;
+
     void rage(UserCmd* cmd, const Vector& previousViewAngles, const Vector& currentViewAngles, bool& sendPacket) noexcept;
+    void legit(UserCmd* cmd, const Vector& previousViewAngles, const Vector& currentViewAngles, bool& sendPacket) noexcept;
+
     void run(UserCmd* cmd, const Vector& previousViewAngles, const Vector& currentViewAngles, bool& sendPacket) noexcept;
     void updateInput() noexcept;
     bool canRun(UserCmd* cmd) noexcept;
-    inline int auto_direction_yaw{};
-
-    float getLastShotTime();
-    bool getIsShooting();
-    bool getDidShoot();
-    void setLastShotTime(float shotTime);
-    void setIsShooting(bool shooting);
-    void setDidShoot(bool shot);
 }

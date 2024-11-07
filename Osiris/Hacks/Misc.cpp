@@ -15,7 +15,6 @@
 #include "../Helpers.h"
 #include "../GameData.h"
 
-#include "AntiAim.h"
 #include "EnginePrediction.h"
 #include "Misc.h"
 
@@ -41,16 +40,6 @@
 #include "../SDK/WeaponSystem.h"
 
 #include "../imguiCustom.h"
-#include "../includes.hpp"
-
-UserCmd* cmd1;
-int goofy;
-void Misc::getCmd(UserCmd* cmd) noexcept
-{
-    cmd1 = cmd;
-    if (localPlayer && localPlayer->isAlive())
-        goofy = get_moving_flag(cmd);
-}
 
 bool Misc::isInChat() noexcept
 {
@@ -1384,74 +1373,65 @@ void Misc::inverseRagdollGravity() noexcept
 
 void Misc::updateClanTag(bool tagChanged) noexcept
 {
-    static bool wasEnabled = false;
+    static std::string clanTag;
+
     static auto clanId = interfaces->cvar->findVar("cl_clanid");
-    if (!config->misc.customClanTag && wasEnabled)
+    static bool wasEnabled = false;
+
+    if (wasEnabled && !config->misc.clocktag && !config->misc.customClanTag)
     {
         interfaces->engine->clientCmdUnrestricted(("cl_clanid " + std::to_string(clanId->getInt())).c_str());
         wasEnabled = false;
-    }
-    if (!config->misc.customClanTag)
-    {
         return;
     }
 
-    static std::string clanTag;
+    wasEnabled = config->misc.clocktag || config->misc.customClanTag;
 
-    static int lastTime = 0;
-    int time = memory->globalVars->currenttime * M_PI;
-    if (config->misc.customClanTag)
-    {
-        wasEnabled = true;
-        if (time != lastTime)
-        {
-            switch (time % 30)
-            {
-            case 0: { memory->setClanTag(" Better Osiris ", " Better Osiris "); break; }
-            case 1: { memory->setClanTag(" Better Osiris ", " Better Osiris "); break; }
-            case 2: { memory->setClanTag(" Better Osiris ", " Better Osiris "); break; }
-            case 3: { memory->setClanTag(" Better Osiris ", " Better Osiris "); break; }
-            case 4: { memory->setClanTag(" Better Osiris ", " Better Osiris "); break; }
-            case 5: { memory->setClanTag(" Better Osiris ", " Better Osiris "); break; }
-            case 6: { memory->setClanTag(" Better Osiris ", " Better Osiris "); break; }
-            case 7: { memory->setClanTag(" Better Osiri ", " Better Osiri "); break; }
-            case 8: { memory->setClanTag(" Better Osir ", " Better Osir "); break; }
-            case 9: { memory->setClanTag(" Better Osi ", " Better Osi "); break; }
-            case 10: { memory->setClanTag(" Better Os ", " Better Os "); break; }
-            case 11: { memory->setClanTag(" Better O ", " Better O "); break; }
-            case 12: { memory->setClanTag(" Better ", " Better "); break; }
-            case 13: { memory->setClanTag(" Bette ", " Bette "); break; }
-            case 14: { memory->setClanTag(" Bett ", " Bett "); break; }
-            case 15: { memory->setClanTag(" Bet ", " Bet "); break; }
-            case 16: { memory->setClanTag(" Be ", " Be "); break; }
-            case 17: { memory->setClanTag(" B ", " B "); break; }
-            case 18: { memory->setClanTag("9/11 ", "9/11 "); break; }
-            case 19: { memory->setClanTag(" B ", " B "); break; }
-            case 20: { memory->setClanTag(" Be ", " Be "); break; }
-            case 21: { memory->setClanTag(" Bet ", " Bet "); break; }
-            case 22: { memory->setClanTag(" Bett ", " Bett "); break; }
-            case 23: { memory->setClanTag(" Bette ", " Bette "); break; }
-            case 24: { memory->setClanTag(" Better ", " Better "); break; }
-            case 25: { memory->setClanTag(" Better O", " Better O"); break; }
-            case 26: { memory->setClanTag(" Better Os ", " Better Os "); break; }
-            case 27: { memory->setClanTag(" Better Osi ", " Better Osi "); break; }
-            case 28: { memory->setClanTag(" Better Osir ", " Better Osir "); break; }
-            case 29: { memory->setClanTag(" Better Osiri ", " Better Osiri "); break; }
-            }
+    if (tagChanged) {
+        clanTag = config->misc.clanTag;
+        if (!clanTag.empty() && clanTag.front() != ' ' && clanTag.back() != ' ')
+            clanTag.push_back(' ');
+        return;
+    }
+    
+    static auto lastTime = 0.0f;
+
+    if (config->misc.clocktag) {
+        if (memory->globalVars->realtime - lastTime < 1.0f)
+            return;
+
+        const auto time = std::time(nullptr);
+        const auto localTime = std::localtime(&time);
+        char s[11];
+        s[0] = '\0';
+        snprintf(s, sizeof(s), "[%02d:%02d:%02d]", localTime->tm_hour, localTime->tm_min, localTime->tm_sec);
+        lastTime = memory->globalVars->realtime;
+        memory->setClanTag(s, s);
+    } else if (config->misc.customClanTag) {
+        if (memory->globalVars->realtime - lastTime < 0.6f)
+            return;
+
+        if (config->misc.animatedClanTag && !clanTag.empty()) {
+            const auto offset = Helpers::utf8SeqLen(clanTag[0]);
+            if (offset != -1 && static_cast<std::size_t>(offset) <= clanTag.length())
+                std::rotate(clanTag.begin(), clanTag.begin() + offset, clanTag.end());
         }
-        lastTime = time;
+        lastTime = memory->globalVars->realtime;
+        memory->setClanTag(clanTag.c_str(), clanTag.c_str());
     }
 }
+
 const bool anyActiveKeybinds() noexcept
 {
     const bool rageBot = config->ragebotKey.canShowKeybind();
     const bool minDamageOverride = config->minDamageOverrideKey.canShowKeybind();
-    const bool fakeAngle = config->rageAntiAim[static_cast<int>(goofy)].desync && config->invert.canShowKeybind();
-    const bool antiAimManualForward = config->condAA.global && config->manualForward.canShowKeybind();
-    const bool antiAimManualBackward = config->condAA.global && config->manualBackward.canShowKeybind();
-    const bool antiAimManualRight = config->condAA.global && config->manualRight.canShowKeybind();
-    const bool antiAimManualLeft = config->condAA.global && config->manualLeft.canShowKeybind();
+    const bool fakeAngle = config->fakeAngle.enabled && config->fakeAngle.invert.canShowKeybind();
+    const bool antiAimManualForward = config->rageAntiAim.enabled && config->rageAntiAim.manualForward.canShowKeybind();
+    const bool antiAimManualBackward = config->rageAntiAim.enabled && config->rageAntiAim.manualBackward.canShowKeybind();
+    const bool antiAimManualRight = config->rageAntiAim.enabled && config->rageAntiAim.manualRight.canShowKeybind();
+    const bool antiAimManualLeft = config->rageAntiAim.enabled && config->rageAntiAim.manualLeft.canShowKeybind();
     const bool legitAntiAim = config->legitAntiAim.enabled && config->legitAntiAim.invert.canShowKeybind();
+    const bool freestand = config->rageAntiAim.enabled && config->rageAntiAim.Freestand.canShowKeybind();
     const bool doubletap = config->tickbase.doubletap.canShowKeybind();
     const bool hideshots = config->tickbase.hideshots.canShowKeybind();
     const bool legitBot = config->legitbotKey.canShowKeybind();
@@ -1477,7 +1457,7 @@ const bool anyActiveKeybinds() noexcept
 
     return rageBot || minDamageOverride || fakeAngle || antiAimManualForward || antiAimManualBackward || antiAimManualRight  || antiAimManualLeft 
         || doubletap || hideshots
-        || legitAntiAim || legitBot || triggerBot || chams || glow || esp
+        || legitAntiAim || freestand || legitBot || triggerBot || chams || glow || esp
         || zoom || thirdperson || freeCam || blockbot || edgejump || minijump || jumpBug || edgebug || autoPixelSurf || slowwalk || fakeduck || autoPeek || prepareRevolver;
 }
 
@@ -1510,22 +1490,15 @@ void Misc::showKeybinds() noexcept
 
     config->ragebotKey.showKeybind();
     config->minDamageOverrideKey.showKeybind();
-    if (config->invert.isActive() && config->rageAntiAim[static_cast<int>(goofy)].desync)
-        config->rageAntiAim[static_cast<int>(goofy)].desync&& config->invert.canShowKeybind();
-    if (config->condAA.global)
+    if (config->fakeAngle.enabled)
+        config->fakeAngle.invert.showKeybind();
+    if (config->rageAntiAim.enabled)
     {
-        if (config->manualForward.isActive()) {
-            config->condAA.global&& config->manualForward.canShowKeybind();
-        }
-        if (config->manualBackward.isActive()){
-            config->condAA.global&& config->manualBackward.canShowKeybind();
-        }
-        if (config->manualRight.isActive()) {
-            config->condAA.global&& config->manualRight.canShowKeybind();
-        }
-        if (config->manualLeft.isActive()) {
-            config->condAA.global&& config->manualLeft.canShowKeybind();
-        }
+        config->rageAntiAim.manualForward.showKeybind();
+        config->rageAntiAim.manualBackward.showKeybind();
+        config->rageAntiAim.manualRight.showKeybind();
+        config->rageAntiAim.manualLeft.showKeybind();
+        config->rageAntiAim.Freestand.showKeybind();
     }
 
     config->tickbase.doubletap.showKeybind();
@@ -2104,27 +2077,8 @@ void Misc::killMessage(GameEvent& event) noexcept
     if (const auto localUserId = localPlayer->getUserId(); event.getInt("attacker") != localUserId || event.getInt("userid") == localUserId)
         return;
 
-    srand(time(0));
-    auto randomMessage = rand() % 4;
-    std::string killMessage = "";
-
-    switch (randomMessage)
-    {
-    case 0:
-        killMessage = "Imagine getting 1'ed by BetterOsiris";
-        break;
-    case 1:
-        killMessage = "Better luck next time!";
-        break;
-    case 2:
-        killMessage = "way too ez for Better Osiris";
-        break;
-    case 3:
-        killMessage = "How did you change your difficulty settings? My CS:GO is stuck on easy";
-    }
-
     std::string cmd = "say \"";
-    cmd += killMessage;
+    cmd += config->misc.killMessageString;
     cmd += '"';
     interfaces->engine->clientCmdUnrestricted(cmd.c_str());
 }
@@ -2412,7 +2366,7 @@ void Misc::purchaseList(GameEvent* event) noexcept
     if (event) {
         switch (fnv::hashRuntime(event->getName())) {
         case fnv::hash("item_purchase"): {
-            const auto player = interfaces->entityList->getEntity(interfaces->engine->getPlayerFromUserID(event->getInt("userid")));
+            const auto player = interfaces->entityList->getEntity(interfaces->engine->getPlayerForUserID(event->getInt("userid")));
 
             if (player && localPlayer && memory->isOtherEnemy(player, localPlayer.get())) {
                 if (const auto definition = memory->itemSystem()->getItemSchema()->getItemDefinitionByName(event->getString("weapon"))) {
@@ -2650,7 +2604,7 @@ void Misc::chatRevealer(GameEvent& event, GameEvent* events) noexcept
     if (!localPlayer)
         return;
 
-    const auto entity = interfaces->entityList->getEntity(interfaces->engine->getPlayerFromUserID(events->getInt("userid")));
+    const auto entity = interfaces->entityList->getEntity(interfaces->engine->getPlayerForUserID(events->getInt("userid")));
     if (!entity)
         return;
 

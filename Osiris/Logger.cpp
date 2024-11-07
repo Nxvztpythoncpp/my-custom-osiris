@@ -9,6 +9,8 @@
 #include "SDK/Entity.h"
 #include "SDK/LocalPlayer.h"
 
+#include "Hacks/Resolver.h"
+
 std::string getStringFromHitgroup(int hitgroup) noexcept
 {
     switch (hitgroup) {
@@ -59,8 +61,8 @@ void Logger::getEvent(GameEvent* event) noexcept
     switch (fnv::hashRuntime(event->getName())) {
     case fnv::hash("player_hurt"):  {
 
-        const int hurt = interfaces->engine->getPlayerFromUserID(event->getInt("userid"));
-        const int attack = interfaces->engine->getPlayerFromUserID(event->getInt("attacker"));
+        const int hurt = interfaces->engine->getPlayerForUserID(event->getInt("userid"));
+        const int attack = interfaces->engine->getPlayerForUserID(event->getInt("attacker"));
         const auto damage = std::to_string(event->getInt("dmg_health"));
         const auto hitgroup = getStringFromHitgroup(event->getInt("hitgroup"));
 
@@ -92,7 +94,7 @@ void Logger::getEvent(GameEvent* event) noexcept
         if ((config->misc.loggerOptions.events & 1 << BombPlants) != 1 << BombPlants)
             break;
 
-        const int idx = interfaces->engine->getPlayerFromUserID(event->getInt("userid"));
+        const int idx = interfaces->engine->getPlayerForUserID(event->getInt("userid"));
         if (idx == localPlayer->index())
             break;
 
@@ -109,7 +111,7 @@ void Logger::getEvent(GameEvent* event) noexcept
         if ((config->misc.loggerOptions.events & 1 << HostageTaken) != 1 << HostageTaken)
             break;
 
-        const int idx = interfaces->engine->getPlayerFromUserID(event->getInt("userid"));
+        const int idx = interfaces->engine->getPlayerForUserID(event->getInt("userid"));
         if (idx == localPlayer->index())
             break;
 

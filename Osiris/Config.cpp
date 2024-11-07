@@ -56,7 +56,7 @@ Config::Config() noexcept
         CoTaskMemFree(pathToDocuments);
     }
 
-    path /= "OsirisAndExtra";
+    path /= "Osiris";
     listConfigs();
     misc.clanTag[0] = '\0';
     misc.name[0] = '\0';
@@ -307,43 +307,23 @@ static void from_json(const json& j, Config::LegitAntiAimConfig& a)
 
 static void from_json(const json& j, Config::RageAntiAimConfig& a)
 {
-    read(j, "Pitch", a.pitch);
+    read(j, "Enabled", a.enabled);
+    read(j, "Pitch", a.pitch); 
+    read(j, "PitchJitterRange", a.PitchJitterRange);
     read(j, "Yaw base", reinterpret_cast<int&>(a.yawBase));
-    read(j, "Freestand", a.freestand);
-    read(j, "Fake flick", a.fakeFlick);
-    read(j, "FF rate", a.fakeFlickRate);
+    //read(j, "Freestand key", freestandKey);
+    read(j, "Freestand", a.Freestand);
+    read(j, "Manual forward Key", a.manualForward);
+    read(j, "Manual backward Key", a.manualBackward);
+    read(j, "Manual right Key", a.manualRight);
+    read(j, "Manual left Key", a.manualLeft);
     read(j, "Yaw modifier", a.yawModifier);
     read(j, "Yaw add", a.yawAdd);
     read(j, "Jitter Range", a.jitterRange);
-    read(j, "Random Range", a.randomRange);
-    read(j, "Roll add", a.roll.add);
-    read(j, "Roll", a.roll.enabled);
-    read(j, "Roll pitchE", a.roll.exploitPitch);
-    read(j, "Roll pitch", a.roll.pitch);
     read(j, "Spin base", a.spinBase);
     read(j, "At targets", a.atTargets);
-    read(j, "Desync", a.desync);
-    read(j, "Left limit", a.leftLimit);
-    read(j, "Right limit", a.rightLimit);
-    read(j, "Peek mode", a.peekMode);
-    read(j, "Lby mode", a.lbyMode);
-}
-static void from_json(const json& j, Config::AntiAimConditions& c)
-{
-    read<value_t::object>(j, "Visualize", c.visualize);
-    read(j, "Visualize type", c.visualizeType);
-    read(j, "Visualize offset", c.visualizeOffset);
-    read(j, "Visualize size", c.visualizeSize);
-    read(j, "G", c.global);
-    read(j, "M", c.moving);
-    read(j, "S", c.slowwalk);
-    read(j, "J", c.jumping);
-    read(j, "CJ", c.cjump);
-    read(j, "C", c.chrouch);
-    read(j, "BREAKERS", c.animBreakers);
 }
 
-/*
 static void from_json(const json& j, Config::FakeAngle& a)
 {
     read(j, "Enabled", a.enabled);
@@ -353,7 +333,6 @@ static void from_json(const json& j, Config::FakeAngle& a)
     read(j, "Peek mode", a.peekMode);
     read(j, "Lby mode", a.lbyMode);
 }
-*/
 
 static void from_json(const json& j, Config::Fakelag& f)
 {
@@ -819,16 +798,6 @@ void Config::load(const char8_t* name, bool incremental) noexcept
     read<value_t::object>(j, "Draw legitbot fov", legitbotFov);
 
     read<value_t::object>(j, "Recoil control system", recoilControlSystem);
-    //aa
-    read(j, "Disable in freezetime", disableInFreezetime);
-    read(j, "Manual forward Key", manualForward);
-    read(j, "Manual backward Key", manualBackward);
-    read(j, "Manual right Key", manualRight);
-    read(j, "Manual left Key", manualLeft);
-    read(j, "Fake flick key", fakeFlickOnKey);
-    read(j, "Flip Flick", flipFlick);
-    read(j, "Invert", invert);
-    //aa
 
     read(j, "Ragebot", ragebot);
     read(j, "Ragebot Key", ragebotKey);
@@ -838,9 +807,9 @@ void Config::load(const char8_t* name, bool incremental) noexcept
     read(j, "Triggerbot Key", triggerbotKey);
 
     read<value_t::object>(j, "Legit Anti aim", legitAntiAim);
-    read(j, "Rage Anti aim", rageAntiAim);
+    read<value_t::object>(j, "Rage Anti aim", rageAntiAim);
     read(j, "Disable in freezetime", disableInFreezetime);
-    //read<value_t::object>(j, "Fake angle", fakeAngle);
+    read<value_t::object>(j, "Fake angle", fakeAngle);
     read<value_t::object>(j, "Fakelag", fakelag);
     read<value_t::object>(j, "Tickbase", tickbase);
     read<value_t::object>(j, "Backtrack", backtrack);
@@ -1135,46 +1104,24 @@ static void to_json(json& j, const Config::LegitAntiAimConfig& o, const Config::
 
 static void to_json(json& j, const Config::RageAntiAimConfig& o, const Config::RageAntiAimConfig& dummy = {})
 {
+    WRITE("Enabled", enabled);
     WRITE("Pitch", pitch);
+    WRITE("PitchJitterRange", PitchJitterRange);
     WRITE_ENUM("Yaw base", yawBase);
+
+    to_json(j["Freestand"], o.Freestand, KeyBind::NONE);
+
+    to_json(j["Manual forward Key"], o.manualForward, KeyBind::NONE);
+    to_json(j["Manual backward Key"], o.manualBackward, KeyBind::NONE);
+    to_json(j["Manual right Key"], o.manualRight, KeyBind::NONE);
+    to_json(j["Manual left Key"], o.manualLeft, KeyBind::NONE);
     WRITE("Yaw modifier", yawModifier);
     WRITE("Yaw add", yawAdd);
     WRITE("Jitter Range", jitterRange);
-    WRITE("Random Range", randomRange);
     WRITE("Spin base", spinBase);
     WRITE("At targets", atTargets);
-    WRITE("Roll add", roll.add);
-    WRITE("Roll", roll.enabled);
-    WRITE("Roll pitchE", roll.exploitPitch);
-    WRITE("Roll pitch", roll.pitch);
-    WRITE("Fake flick", fakeFlick);
-    WRITE("FF rate", fakeFlickRate);
-    WRITE("Freestand", freestand);
-    WRITE("Desync", desync);
-    WRITE("Left limit", leftLimit);
-    WRITE("Right limit", rightLimit);
-    WRITE("Peek mode", peekMode);
-    WRITE("Lby mode", lbyMode);
 }
 
-static void to_json(json& j, const Config::AntiAimConditions& o, const Config::AntiAimConditions& dummy = {})
-{
-    WRITE("Visualize type", visualizeType);
-    WRITE("Visualize offset", visualizeOffset);
-    WRITE("Visualize size", visualizeSize);
-    WRITE("Visualize", visualize);
-    WRITE("G", global);
-    WRITE("M", moving);
-    WRITE("S", slowwalk);
-    WRITE("J", jumping);
-    WRITE("CJ", cjump);
-    WRITE("C", chrouch);
-    WRITE("BREAKERS", animBreakers);
-}
-
-
-
-/*
 static void to_json(json& j, const Config::FakeAngle& o, const Config::FakeAngle& dummy = {})
 {
     WRITE("Enabled", enabled);
@@ -1184,7 +1131,6 @@ static void to_json(json& j, const Config::FakeAngle& o, const Config::FakeAngle
     WRITE("Peek mode", peekMode);
     WRITE("Lby mode", lbyMode);
 }
-*/
 
 static void to_json(json& j, const Config::Fakelag& o, const Config::Fakelag& dummy = {})
 {
@@ -1222,7 +1168,6 @@ static void to_json(json& j, const PurchaseList& o, const PurchaseList& dummy = 
         j["Pos"] = window->Pos;
     }
 }
-
 
 static void to_json(json& j, const Config::Misc::SpectatorList& o, const Config::Misc::SpectatorList& dummy = {})
 {
@@ -1641,14 +1586,7 @@ void Config::save(size_t id) const noexcept
         j["Legit Anti aim"] = legitAntiAim;
         j["Rage Anti aim"] = rageAntiAim;
         j["Disable in freezetime"] = disableInFreezetime;
-       // j["Fake angle"] = fakeAngle;
-        to_json(j["Flip Flick"], flipFlick, KeyBind::NONE);
-        to_json(j["Manual forward Key"], manualForward, KeyBind::NONE);
-        to_json(j["Manual backward Key"], manualBackward, KeyBind::NONE);
-        to_json(j["Manual right Key"], manualRight, KeyBind::NONE);
-        to_json(j["Manual left Key"], manualLeft, KeyBind::NONE);
-        to_json(j["Fake flick key"], fakeFlickOnKey, KeyBind::NONE);
-        to_json(j["Invert"], invert, KeyBind::NONE);
+        j["Fake angle"] = fakeAngle;
         j["Fakelag"] = fakelag;
         j["Tickbase"] = tickbase;
         j["Backtrack"] = backtrack;
@@ -1700,7 +1638,7 @@ void Config::reset() noexcept
     ragebot = { };
     rageAntiAim = { };
     disableInFreezetime = true;
-    //fakeAngle = { };
+    fakeAngle = { };
     fakelag = { };
     tickbase = { };
     backtrack = { };

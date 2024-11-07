@@ -70,6 +70,9 @@
 #include "SDK/Surface.h"
 #include "SDK/UserCmd.h"
 #include "SDK/ViewSetup.h"
+#include "SDK/ParticleCollection.h"
+#include "SDK/ItemSchema.h"
+
 
 static LRESULT __stdcall wndProc(HWND window, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
 {
@@ -86,14 +89,14 @@ static LRESULT __stdcall wndProc(HWND window, UINT msg, WPARAM wParam, LPARAM lP
         hooks->install();
 
         return true;
-        }(window);
+    }(window);
 
-        LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-        ImGui_ImplWin32_WndProcHandler(window, msg, wParam, lParam);
+    LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    ImGui_ImplWin32_WndProcHandler(window, msg, wParam, lParam);
 
-        interfaces->inputSystem->enableInput(!gui->isOpen());
+    interfaces->inputSystem->enableInput(!gui->isOpen());
 
-        return CallWindowProcW(hooks->originalWndProc, window, msg, wParam, lParam);
+    return CallWindowProcW(hooks->originalWndProc, window, msg, wParam, lParam);
 }
 
 static HRESULT __stdcall present(IDirect3DDevice9* device, const RECT* src, const RECT* dest, HWND windowOverride, const RGNDATA* dirtyRegion) noexcept
@@ -115,6 +118,7 @@ static HRESULT __stdcall present(IDirect3DDevice9* device, const RECT* src, cons
         Visuals::drawAimbotFov(ImGui::GetBackgroundDrawList());
         Misc::noscopeCrosshair(ImGui::GetBackgroundDrawList());
         Misc::recoilCrosshair(ImGui::GetBackgroundDrawList());
+        Misc::headshotLine(ImGui::GetBackgroundDrawList());
         Misc::drawOffscreenEnemies(ImGui::GetBackgroundDrawList());
         Misc::drawBombTimer();
         Misc::hurtIndicator();
@@ -226,6 +230,7 @@ static void __fastcall packetStart(void* thisPointer, void* edx, int incomingSeq
     return hooks->clientState.callOriginal<void, 5>(incomingSequence, outgoingAcknowledged);
 }
 
+
 static void __fastcall processPacket(void* thisPointer, void* edx, void* packet, bool header) noexcept
 {
     static auto original = hooks->clientState.getOriginal<void>(packet, header);
@@ -250,7 +255,7 @@ static void __fastcall postDataUpdateHook(void* thisPointer, void* edx, int upda
     static auto original = hooks->postDataUpdate.getOriginal<void>(updateType);
 
     original(thisPointer, updateType);
-
+    
     Animations::postDataUpdate();
     return;
 }
@@ -338,6 +343,12 @@ static bool __stdcall createMove(float inputSampleTime, UserCmd* cmd, bool& send
         cmd->sidemove = std::clamp(cmd->sidemove, -450.0f, 450.0f);
         cmd->upmove = std::clamp(cmd->upmove, -320.0f, 320.0f);
 
+        cmd->viewanglesBackup.x = cmd->viewangles.x;
+        cmd->viewanglesBackup.y = cmd->viewangles.y;
+        cmd->viewanglesBackup.z = cmd->viewangles.z;
+
+        cmd->buttonsBackup = cmd->buttons;
+
         if (localPlayer && localPlayer->isAlive())
             memory->restoreEntityToPredictedFrame(0, currentPredictedTick);
         Misc::gatherDataOnTick(cmd);
@@ -380,7 +391,7 @@ static bool __stdcall createMove(float inputSampleTime, UserCmd* cmd, bool& send
     Triggerbot::run(cmd);
     Ragebot::run(cmd);
     Knifebot::run(cmd);
-    Tickbase::end(cmd, sendPacket);
+    Tickbase::end(cmd);
 
     Misc::autoPeek(cmd, currentViewAngles);
     Misc::autoPixelSurf(cmd);
@@ -533,7 +544,7 @@ static void __stdcall frameStageNotify(FrameStage stage) noexcept
 
     if (interfaces->engine->isConnected() && !interfaces->engine->isInGame())
         Misc::changeName(true, nullptr, 0.0f);
-
+    
     if (stage == FrameStage::START)
         GameData::update();
 
@@ -546,6 +557,7 @@ static void __stdcall frameStageNotify(FrameStage stage) noexcept
         Visuals::updateEventListeners();
         Resolver::updateEventListeners();
         Visuals::transparentWorld();
+        Visuals::colorConsole();
     }
     if (interfaces->engine->isInGame()) {
         Visuals::drawBulletImpacts();
@@ -814,10 +826,10 @@ static void __fastcall buildTransformationsHook(void* thisPointer, void* edx, CS
     }
 
     const UtlVector<int> backupFlags = hdr->boneFlags;
-
+    
     for (int i = 0; i < hdr->boneFlags.size; i++)
     {
-        if (config->visuals.disableJiggleBones)
+        if(config->visuals.disableJiggleBones)
             hdr->boneFlags.elements[i] &= ~0x04;
         else
             hdr->boneFlags.elements[i] |= 0x04;
@@ -838,7 +850,7 @@ static void __fastcall standardBlendingRulesHook(void* thisPointer, void* edx, v
     static auto original = hooks->standardBlendingRules.getOriginal<void>(hdr, pos, q, currentTime, boneMask);
 
     const auto entity = reinterpret_cast<Entity*>(thisPointer);
-
+    
     entity->getEffects() |= 8;
 
     original(thisPointer, hdr, pos, q, currentTime, boneMask);
@@ -978,7 +990,7 @@ static void __fastcall setupVelocityHook(void* thisPointer, void* edx) noexcept
     if (!entity || !entity->isAlive() || !entity->isPlayer() || !localPlayer || entity != localPlayer.get())
         return original(thisPointer);
 
-    if (Animations::isFakeUpdating())
+    if(Animations::isFakeUpdating())
         return original(thisPointer);
 
     animState->setupVelocity();
@@ -1016,7 +1028,7 @@ static void __fastcall setupAliveloopHook(void* thisPointer, void* edx) noexcept
     animState->setupAliveLoop();
 }
 
-static bool __fastcall setupBonesHook(void* thisPointer, void* edx, matrix3x4* boneToWorldOut, int maxBones, int boneMask, float currentTime) noexcept
+static bool __fastcall setupBonesHook(void* thisPointer, void* edx, matrix3x4* boneToWorldOut , int maxBones, int boneMask, float currentTime) noexcept
 {
     static auto original = hooks->setupBones.getOriginal<bool>(boneToWorldOut, boneMask, maxBones, currentTime);
 
@@ -1050,7 +1062,7 @@ static bool __fastcall setupBonesHook(void* thisPointer, void* edx, matrix3x4* b
 
         localPlayer->poseParameters() = poseParameters;
         std::memcpy(localPlayer->animOverlays(), &layers, sizeof(AnimationLayer) * localPlayer->getAnimationLayersCount());
-
+        
         if (boneToWorldOut)
         {
             auto renderOrigin = entity->getRenderOrigin();
@@ -1244,6 +1256,96 @@ static void __cdecl clMoveHook(float frameTime, bool isFinalTick) noexcept
     Tickbase::isShifting() = false;
 
     Tickbase::resetTickshift();
+}
+
+static void __fastcall particleCollectionSimulateHook(ParticleCollection* thisPointer) {
+
+    constexpr float pi = std::numbers::pi_v<float>;
+
+    static auto original = hooks->particleCollectionSimulate.getOriginal<bool>();
+
+    original(thisPointer);
+
+    if (!interfaces->engine->isConnected())
+        return;
+
+    ParticleCollection* rootCollection = thisPointer;
+    while (rootCollection->parent)
+        rootCollection = rootCollection->parent;
+
+    const char* rootName = rootCollection->def.object->name.buffer;
+
+    //printf(std::string(rootName).append("\n").c_str()); //prints existing particles
+
+    switch (fnv::hash(rootName))
+    {
+        case fnv::hash("molotov_groundfire"):
+        case fnv::hash("molotov_groundfire_00MEDIUM"):
+        case fnv::hash("molotov_groundfire_00HIGH"):
+        case fnv::hash("molotov_groundfire_fallback"):
+        case fnv::hash("molotov_groundfire_fallback2"):
+        case fnv::hash("molotov_explosion"):
+        case fnv::hash("explosion_molotov_air"):
+        case fnv::hash("extinguish_fire"):
+        case fnv::hash("weapon_molotov_held"):
+        case fnv::hash("weapon_molotov_fp"):
+        case fnv::hash("weapon_molotov_thrown"):
+        case fnv::hash("incgrenade_thrown_trail"):
+            switch (fnv::hash(thisPointer->def.object->name.buffer))
+            {
+            case fnv::hash("explosion_molotov_air_smoke"):
+            case fnv::hash("molotov_smoking_ground_child01"):
+            case fnv::hash("molotov_smoking_ground_child02"):
+            case fnv::hash("molotov_smoking_ground_child02_cheapo"):
+            case fnv::hash("molotov_smoking_ground_child03"):
+            case fnv::hash("molotov_smoking_ground_child03_cheapo"):
+            case fnv::hash("molotov_smoke_screen"):
+                break;
+            default:
+                if (config->visuals.molotovColor.enabled) {
+
+                    for (int i = 0; i < thisPointer->activeParticles; i++) {
+                        float* color = thisPointer->particleAttributes.FloatAttributePtr(PARTICLE_ATTRIBUTE_TINT_RGB, i);
+                        if (config->visuals.molotovColor.rainbow) {
+                            color[0] = std::sin(config->visuals.molotovColor.rainbowSpeed * memory->globalVars->realtime) * 0.5f + 0.5f;
+                            color[4] = std::sin(config->visuals.molotovColor.rainbowSpeed * memory->globalVars->realtime + 2 * pi / 3) * 0.5f + 0.5f;
+                            color[8] = std::sin(config->visuals.molotovColor.rainbowSpeed * memory->globalVars->realtime + 4 * pi / 3) * 0.5f + 0.5f;
+                        }
+                        else {
+                            color[0] = config->visuals.molotovColor.color[0];
+                            color[4] = config->visuals.molotovColor.color[1];
+                            color[8] = config->visuals.molotovColor.color[2];
+                        }
+                        float* alpha = thisPointer->particleAttributes.FloatAttributePtr(PARTICLE_ATTRIBUTE_ALPHA, i);
+                        *alpha = config->visuals.molotovColor.color[3];
+                    }
+
+                }
+                break;
+            }
+            break;
+        case fnv::hash("explosion_smokegrenade_fallback"): {
+            if (config->visuals.smokeColor.enabled) {
+
+                for (int i = 0; i < thisPointer->activeParticles; i++) {
+                    float* color = thisPointer->particleAttributes.FloatAttributePtr(PARTICLE_ATTRIBUTE_TINT_RGB, i);
+                    if (config->visuals.smokeColor.rainbow) {
+                        color[0] = std::sin(config->visuals.smokeColor.rainbowSpeed * memory->globalVars->realtime) * 0.5f + 0.5f;
+                        color[4] = std::sin(config->visuals.smokeColor.rainbowSpeed * memory->globalVars->realtime + 2 * pi / 3) * 0.5f + 0.5f;
+                        color[8] = std::sin(config->visuals.smokeColor.rainbowSpeed * memory->globalVars->realtime + 4 * pi / 3) * 0.5f + 0.5f;
+                    }
+                    else {
+                        color[0] = config->visuals.smokeColor.color[0];
+                        color[4] = config->visuals.smokeColor.color[1];
+                        color[8] = config->visuals.smokeColor.color[2];
+                    }
+                    float* alpha = thisPointer->particleAttributes.FloatAttributePtr(PARTICLE_ATTRIBUTE_ALPHA, i);
+                    *alpha = config->visuals.smokeColor.color[3];
+                }
+
+            }
+        }
+    }
 }
 
 static void __fastcall getColorModulationHook(void* thisPointer, void* edx, float* r, float* g, float* b) noexcept
@@ -1488,11 +1590,11 @@ static bool __fastcall postNetworkDataReceivedHook(void* thisPointer, void* edx,
 static Vector* __fastcall eyeAnglesHook(void* thisPointer, void* edx) noexcept
 {
     static auto original = hooks->eyeAngles.getOriginal<Vector*>();
-
+    
     const auto entity = reinterpret_cast<Entity*>(thisPointer);
     if (!localPlayer || entity != localPlayer.get())
         return original(thisPointer);
-
+    
     if (std::uintptr_t(_ReturnAddress()) != memory->eyePositionAndVectors)
         return original(thisPointer);
 
@@ -1561,7 +1663,7 @@ void Hooks::install() noexcept
     newFunctionMaterialSystemDLL.detour(memory->newFunctionMaterialSystemDLL, newFunctionMaterialSystemBypass);
 
     sendDatagram.detour(memory->sendDatagram, sendDatagramHook);
-
+    
     buildTransformations.detour(memory->buildTransformations, buildTransformationsHook);
     doExtraBoneProcessing.detour(memory->doExtraBoneProcessing, doExtraBoneProcessingHook);
     shouldSkipAnimationFrame.detour(memory->shouldSkipAnimationFrame, shouldSkipAnimationFrameHook);
@@ -1596,6 +1698,7 @@ void Hooks::install() noexcept
     getClientModelRenderable.detour(memory->getClientModelRenderable, getClientModelRenderableHook);
     physicsSimulate.detour(memory->physicsSimulate, physicsSimulateHook);
     updateFlashBangEffect.detour(memory->updateFlashBangEffect, updateFlashBangEffectHook);
+    particleCollectionSimulate.detour(memory->particleCollection, particleCollectionSimulateHook);
     //postNetworkDataReceived.detour(memory->postNetworkDataReceived, postNetworkDataReceivedHook);
 
     bspQuery.init(interfaces->engine->getBSPTreeQuery());
@@ -1606,7 +1709,7 @@ void Hooks::install() noexcept
     client.hookAt(24, writeUsercmdDeltaToBuffer);
     client.hookAt(37, frameStageNotify);
     client.hookAt(38, dispatchUserMessage);
-
+    
     clientMode.init(memory->clientMode);
     clientMode.hookAt(17, shouldDrawFog);
     clientMode.hookAt(18, overrideView);
